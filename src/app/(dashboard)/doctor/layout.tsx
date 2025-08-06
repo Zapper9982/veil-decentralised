@@ -35,6 +35,9 @@ export default async function DashboardLayout({
 
   if (!role || role == "unset") return redirect("/verification")
 
+  // Ensure only doctors can access doctor routes
+  if (role !== "doctor") return redirect("/dashboard")
+
   return (
     <div className="w-full bg-background">
       <header className="flex h-16 items-center justify-between border-b p-4 pl-8 pr-12 lg:pl-36 lg:pr-24">
