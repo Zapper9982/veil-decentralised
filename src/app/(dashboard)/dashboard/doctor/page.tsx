@@ -37,6 +37,9 @@ import { MedicalContract } from "@/components/contract"
 import { DashboardHeader } from "@/components/header"
 import { Icons } from "@/components/icons"
 import { DashboardShell } from "@/components/shell"
+import { getHealthTokenContract, getSigner } from "@/lib/web3"
+import { ethers } from "ethers"
+import { useToast } from "@/components/ui/use-toast"
 
 // Mock doctor data (replace with actual data fetching logic)
 const doctorData = {
@@ -101,6 +104,10 @@ export default function DoctorProfile() {
   const [prescriptions, setPrescriptions] = useState<any[]>([])
   const [balance, setBalance] = useState(100)
   const [topUpAmount, setTopUpAmount] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
+  const [walletConnected, setWalletConnected] = useState(false)
+  const [currentNetwork, setCurrentNetwork] = useState("")
+  const { toast } = useToast()
 
   useEffect(() => {
     // Fetch appointments and prescriptions
@@ -125,13 +132,138 @@ export default function DoctorProfile() {
         validTill: new Date("2023-06-15"),
       },
     ])
+    
+    // Fetch actual HTK balance from blockchain
+    fetchBalance()
   }, [])
 
-  const handleTopUp = () => {
+  const fetchBalance = async () => {
+    try {
+      console.log("🔍 Fetching balance...")
+      const signer = await getSigner()
+      console.log("👤 Signer for balance:", signer ? "✅ Connected" : "❌ Not connected")
+      
+      if (!signer) {
+        console.log("❌ No signer available")
+        setWalletConnected(false)
+        return
+      }
+      
+      setWalletConnected(true)
+      
+      // Check network
+      const network = await signer.provider?.getNetwork()
+      console.log("🌐 Current network:", network)
+      setCurrentNetwork(network ? `${network.name} (${network.chainId})` : "Unknown")
+      
+      const address = await signer.getAddress()
+      console.log("🏠 User address:", address)
+      
+      const healthTokenContract = await getHealthTokenContract()
+      console.log("🏥 Health token contract for balance:", healthTokenContract ? "✅ Loaded" : "❌ Failed")
+      
+      const balance = await healthTokenContract.balanceOf(address)
+      console.log("💰 Raw balance:", balance.toString())
+      
+      // Convert from wei to tokens (assuming 18 decimals for ERC20)
+      const balanceInTokens = ethers.formatEther(balance)
+      console.log("💎 Balance in tokens:", balanceInTokens)
+      
+      setBalance(parseFloat(balanceInTokens))
+    } catch (error) {
+      console.error("❌ Error fetching balance:", error)
+      setWalletConnected(false)
+    }
+  }
+
+  const handleTopUp = async () => {
+    console.log("🔥 Top-up button clicked!")
+    
     const amount = parseFloat(topUpAmount)
+    console.log("💰 Amount entered:", amount)
+    
     if (!isNaN(amount) && amount > 0) {
-      setBalance((prevBalance) => prevBalance + amount)
-      setTopUpAmount("")
+      setIsLoading(true)
+      try {
+        console.log("🔍 Getting signer...")
+        const signer = await getSigner()
+        console.log("👤 Signer:", signer ? "✅ Connected" : "❌ Not connected")
+        
+        if (!signer) {
+          toast({
+            title: "Wallet Not Connected",
+            description: "Please connect your wallet to buy tokens",
+            variant: "destructive",
+          })
+          setIsLoading(false)
+          return
+        }
+
+        console.log("🏥 Getting health token contract...")
+        const healthTokenContract = await getHealthTokenContract()
+        console.log("📋 Health token contract:", healthTokenContract ? "✅ Loaded" : "❌ Failed")
+        
+        // Convert ETH amount to wei
+        const valueInWei = ethers.parseEther(amount.toString())
+        console.log("💎 Value in wei:", valueInWei.toString())
+        
+        // Call buyTokens function with ETH payment
+        console.log("🚀 Calling buyTokens with", amount, "ETH...")
+        const tx = await healthTokenContract.buyTokens({ value: valueInWei })
+        console.log("📄 Transaction hash:", tx.hash)
+        
+        toast({
+          title: "Transaction Submitted",
+          description: `Transaction hash: ${tx.hash.slice(0, 10)}...`,
+        })
+        
+        // Wait for transaction confirmation
+        console.log("⏳ Waiting for transaction confirmation...")
+        const receipt = await tx.wait()
+        console.log("✅ Transaction confirmed! Block number:", receipt.blockNumber)
+        
+        toast({
+          title: "Tokens Purchased Successfully",
+          description: `You have purchased ${amount * 100} HTK tokens for ${amount} ETH`,
+        })
+        
+        // Refresh balance after purchase
+        console.log("🔄 Refreshing balance...")
+        await fetchBalance()
+        setTopUpAmount("")
+        
+      } catch (error: any) {
+        console.error("❌ Error buying tokens:", error)
+        console.error("Error details:", {
+          message: error.message,
+          code: error.code,
+          reason: error.reason,
+          stack: error.stack
+        })
+        
+        let errorMessage = "Failed to purchase tokens"
+        if (error.code === 4001) {
+          errorMessage = "Transaction was rejected by user"
+        } else if (error.code === -32603) {
+          errorMessage = "Transaction failed - insufficient funds or network error"
+        } else if (error.reason) {
+          errorMessage = error.reason
+        }
+        
+        toast({
+          title: "Transaction Failed",
+          description: errorMessage,
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoading(false)
+      }
+    } else {
+      toast({
+        title: "Invalid Amount",
+        description: "Please enter a valid amount greater than 0",
+        variant: "destructive",
+      })
     }
   }
 
@@ -331,26 +463,38 @@ export default function DoctorProfile() {
                         {balance.toFixed(2)}
                       </div>
                       <span className="flex items-center text-sm text-primary/70">
-                        ≈
-                        <DollarSign className="size-4" />
-                        {balance.toFixed(2)}
+                        Health Tokens Balance
                       </span>
                     </div>
                     <div className="flex items-center space-x-2">
                       <Input
                         type="number"
-                        placeholder="Amount"
+                        placeholder="ETH Amount"
                         value={topUpAmount}
                         onChange={(e) => setTopUpAmount(e.target.value)}
-                        className="w-24"
+                        className="w-28"
+                        disabled={isLoading}
                       />
                       <Button
                         onClick={handleTopUp}
-                        className="bg-green-500 text-white hover:bg-green-600"
+                        disabled={isLoading}
+                        className="bg-green-500 text-white hover:bg-green-600 disabled:opacity-50"
                       >
-                        <Plus className="mr-2 size-4" /> Top Up
+                        {isLoading ? (
+                          <>
+                            <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                            Buying...
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="mr-2 size-4" /> Buy HTK
+                          </>
+                        )}
                       </Button>
                     </div>
+                  </div>
+                  <div className="mt-2 text-xs text-muted-foreground">
+                    Rate: 1 ETH = 100 HTK tokens
                   </div>
                 </CardContent>
               </Card>

@@ -1,11 +1,14 @@
+"use client"
+
+import { useEffect, useState } from "react"
 import { redirect } from "next/navigation"
 import { Medication, Prescription } from "@prisma/client"
+import { ethers } from "ethers"
 
-import { db } from "@/lib/db"
-import { getCurrentUser } from "@/lib/session"
-import { sleep } from "@/lib/utils"
+import { getMedicalContract, getSigner } from "@/lib/web3"
 import { DashboardHeader } from "@/components/header"
 import { DashboardShell } from "@/components/shell"
+import { useToast } from "@/components/ui/use-toast"
 
 import { PrescriptionCard } from "./_components/prescription-card"
 
@@ -30,82 +33,62 @@ const colorSchemes: ColorScheme[] = [
   { primary: "bg-pink-500", secondary: "bg-pink-700", text: "text-pink-100" },
 ]
 
-export default async function PrescriptionsPage() {
-  const user = await getCurrentUser()
-  if (!user || !user.id) return redirect("/login")
+export default function PrescriptionsPage() {
+  const [prescriptions, setPrescriptions] = useState<any[]>([])
+  const { toast } = useToast()
 
-  const role = await db.user.findUnique({
-    where: { id: user.id },
-    select: { role: true },
-  })
-  if (role?.role != "patient") return redirect("/dashboard")
+  useEffect(() => {
+    const fetchPrescriptions = async () => {
+      try {
+        const medicalContract = await getMedicalContract()
+        const signer = await getSigner()
+        if (!signer) {
+          toast({
+            title: "Not Logged In",
+            description: "Please connect your wallet.",
+            variant: "destructive",
+          })
+          redirect("/login")
+          return
+        }
+        const patientAddress = await signer.getAddress()
+        
+        // This is a simplified way to get prescriptions.
+        // A real-world scenario would involve events or a dedicated function to get all prescriptions for a patient.
+        const prescriptionCounter = await medicalContract.prescriptionCounter()
+        const fetchedPrescriptions = []
+        for (let i = 1; i <= prescriptionCounter; i++) {
+          const p = await medicalContract.prescriptions(i)
+          if (p.patientAddress.toLowerCase() === patientAddress.toLowerCase()) {
+            fetchedPrescriptions.push({
+              id: p.id.toString(),
+              issueDate: new Date(Number(p.issueDate) * 1000),
+              doctorAddress: p.doctorAddress,
+              patientAddress: p.patientAddress,
+              medications: p.medications.map((m: any) => ({
+                name: m.name,
+                dosage: m.dosage,
+                duration: m.duration.toString(),
+                additionalInstructions: m.additionalInstructions,
+              })),
+              diagnosis: p.diagnosis,
+              active: p.active,
+            })
+          }
+        }
+        setPrescriptions(fetchedPrescriptions)
+      } catch (error: any) {
+        console.error("Failed to fetch prescriptions:", error)
+        toast({
+          title: "Error",
+          description: "Failed to fetch prescriptions.",
+          variant: "destructive",
+        })
+      }
+    }
 
-  const data = await db.patient.findFirst({
-    where: {
-      userId: user.id,
-    },
-    select: {
-      prescriptions: {
-        select: {
-          id: true,
-          issueDate: true,
-          validTill: true,
-          medications: true,
-          doctor: {
-            select: {
-              id: true,
-              user: {
-                select: {
-                  name: true,
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-  })
-
-  const prescriptions =
-    data?.prescriptions ||
-    ([] as Omit<
-      Prescription & { medications: Medication[] } & {
-        doctor: { id: string; user: { name: string | null } }
-      },
-      "doctorId" | "patientId"
-    >[])
-
-  await prescriptions.push({
-    id: "1",
-    issueDate: new Date(),
-    validTill: new Date(),
-    medications: [
-      {
-        id: "7bef6d5e-f03e-4f52-8d0b-90ca76353f7d",
-        prescId: "123e4567-e89b-12d3-a456-426614174000",
-        name: "Lisinopril",
-        dosage: "10mg",
-        duration: "30 days",
-        additionalInstructions:
-          "Take 1 tablet by mouth once daily in the morning with or without food",
-      },
-      {
-        id: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
-        prescId: "123e4567-e89b-12d3-a456-426614174000",
-        name: "Hydrochlorothiazide",
-        dosage: "12.5mg",
-        duration: "30 days",
-        additionalInstructions:
-          "Take 1 tablet by mouth once daily in the morning with food",
-      },
-    ],
-    doctor: {
-      id: "1",
-      user: {
-        name: "John Doe",
-      },
-    },
-  })
+    fetchPrescriptions()
+  }, [toast])
 
   return (
     <DashboardShell>
@@ -125,3 +108,4 @@ export default async function PrescriptionsPage() {
     </DashboardShell>
   )
 }
+

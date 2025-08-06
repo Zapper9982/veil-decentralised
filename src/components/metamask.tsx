@@ -42,18 +42,76 @@ const switchEthereumChain = async (e: React.MouseEvent<HTMLButtonElement>) => {
   }
 
   try {
+    // Try to switch to local Hardhat network first (most common for development)
     await window.ethereum.request({
       method: "wallet_switchEthereumChain",
-      params: [{ chainId: CHAIN_CONFIG.FUJI_TESTNET }],
+      params: [{ chainId: CHAIN_CONFIG.LOCAL_TESTNET }], // 0x7a69 - Hardhat local
     })
     window.location.reload()
-  } catch (error) {
-    console.error("Failed to switch chain:", error)
-    toast({
-      title: "Chain Switch Failed",
-      description: "Failed to switch to Ganache network",
-      variant: "destructive",
-    })
+  } catch (error: any) {
+    // If LOCAL_TESTNET fails, check if we need to add the network
+    if (error.code === 4902) {
+      try {
+        // Network not found, try to add it
+        await window.ethereum.request({
+          method: "wallet_addEthereumChain",
+          params: [{
+            chainId: CHAIN_CONFIG.LOCAL_TESTNET,
+            chainName: "Hardhat Local",
+            rpcUrls: ["http://127.0.0.1:8545"],
+            nativeCurrency: {
+              name: "Ethereum",
+              symbol: "ETH",
+              decimals: 18
+            }
+          }]
+        })
+        
+        // After adding, try to switch again
+        await window.ethereum.request({
+          method: "wallet_switchEthereumChain",
+          params: [{ chainId: CHAIN_CONFIG.LOCAL_TESTNET }],
+        })
+        window.location.reload()
+      } catch (addError) {
+        // If adding Hardhat fails, try Ganache
+        try {
+          await window.ethereum.request({
+            method: "wallet_addEthereumChain",
+            params: [{
+              chainId: CHAIN_CONFIG.GANACHE_TESTNET,
+              chainName: "Ganache Local",
+              rpcUrls: ["http://127.0.0.1:7545"],
+              nativeCurrency: {
+                name: "Ethereum",
+                symbol: "ETH",
+                decimals: 18
+              }
+            }]
+          })
+          
+          await window.ethereum.request({
+            method: "wallet_switchEthereumChain",
+            params: [{ chainId: CHAIN_CONFIG.GANACHE_TESTNET }],
+          })
+          window.location.reload()
+        } catch (ganacheError) {
+          console.error("Failed to add/switch to any local network:", ganacheError)
+          toast({
+            title: "Network Setup Failed",
+            description: "Please manually add the local network: RPC URL: http://127.0.0.1:8545, Chain ID: 31337",
+            variant: "destructive",
+          })
+        }
+      }
+    } else {
+      console.error("Failed to switch chain:", error)
+      toast({
+        title: "Network Switch Failed",
+        description: "Failed to switch to local development network. Please switch manually.",
+        variant: "destructive",
+      })
+    }
   }
 }
 

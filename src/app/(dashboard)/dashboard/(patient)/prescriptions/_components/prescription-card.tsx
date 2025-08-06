@@ -1,25 +1,26 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
-import { Medication, Prescription } from "@prisma/client"
+import { ethers } from "ethers"
 import { motion } from "framer-motion"
 import {
   Calendar,
   ChevronDown,
   ChevronUp,
-  Clock,
+  DollarSign,
   ExternalLink,
   Pill,
   User,
 } from "lucide-react"
 import { QRCodeSVG } from "qrcode.react"
 
-import { siteConfig } from "@/config/site"
+import { getMedicalContract } from "@/lib/web3"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { useToast } from "@/components/ui/use-toast"
 import {
   Tooltip,
   TooltipContent,
@@ -28,12 +29,7 @@ import {
 } from "@/components/ui/tooltip"
 
 interface PrescriptionCardProps extends React.HTMLAttributes<HTMLDivElement> {
-  prescription: Omit<
-    Prescription & { medications: Medication[] } & {
-      doctor: { id: string; user: { name: string | null } }
-    },
-    "doctorId" | "patientId"
-  >
+  prescription: any
   colorScheme: ColorScheme
 }
 
@@ -48,6 +44,41 @@ export function PrescriptionCard({
   colorScheme,
 }: PrescriptionCardProps) {
   const [isExpanded, setIsExpanded] = useState(false)
+  const [doctorFee, setDoctorFee] = useState<string | null>(null)
+  const { toast } = useToast()
+
+  useEffect(() => {
+    const fetchDoctorFee = async () => {
+      try {
+        const medicalContract = await getMedicalContract()
+        const fee = await medicalContract.getDoctorFee(prescription.doctorAddress)
+        setDoctorFee(ethers.formatUnits(fee, 18))
+      } catch (error) {
+        console.error("Failed to fetch doctor fee:", error)
+      }
+    }
+    fetchDoctorFee()
+  }, [prescription.doctorAddress])
+
+  const handlePayment = async () => {
+    try {
+      const medicalContract = await getMedicalContract()
+      const feeInWei = ethers.parseUnits(doctorFee!, 18)
+      const tx = await medicalContract.payDoctor(prescription.doctorAddress, feeInWei)
+      await tx.wait()
+      toast({
+        title: "Success",
+        description: "Payment successful.",
+      })
+    } catch (error: any) {
+      console.error("Payment failed:", error)
+      toast({
+        title: "Payment Failed",
+        description: error.message || "An error occurred during payment.",
+        variant: "destructive",
+      })
+    }
+  }
 
   return (
     <motion.div
@@ -68,19 +99,20 @@ export function PrescriptionCard({
                   Issued: {prescription.issueDate.toLocaleDateString()}
                 </span>
               </div>
-              <div className="mb-2 flex items-center space-x-2">
-                <Clock className={`size-5 ${colorScheme.text}`} />
-                <span className={`text-sm ${colorScheme.text}`}>
-                  Expires: {prescription.validTill.toLocaleDateString()}
-                </span>
-              </div>
               <div className="flex items-center space-x-2">
                 <User className={`size-5 ${colorScheme.text}`} />
                 <span className={`text-sm ${colorScheme.text}`}>
-                  Dr. {prescription.doctor.user.name} (ID:{" "}
-                  {prescription.doctor.id})
+                  Dr. {prescription.doctorAddress}
                 </span>
               </div>
+              {doctorFee && (
+                <div className="mt-2 flex items-center space-x-2">
+                  <DollarSign className={`size-5 ${colorScheme.text}`} />
+                  <span className={`text-sm ${colorScheme.text}`}>
+                    Fee: {doctorFee} HTK
+                  </span>
+                </div>
+              )}
             </div>
             <div className="flex flex-col items-end space-y-2">
               <Link
@@ -96,12 +128,21 @@ export function PrescriptionCard({
                 <ExternalLink className="mr-2 size-4" />
                 View Details
               </Link>
+              {doctorFee && (
+                <Button
+                  onClick={handlePayment}
+                  variant="secondary"
+                  size="sm"
+                  className={`${colorScheme.secondary} ${colorScheme.text}`}
+                >
+                  Pay Now
+                </Button>
+              )}
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <QRCodeSVG
-                      // value={`${siteConfig.url}/prescriptions/${prescription.id}`}
-                      value={"http://192.168.0.22:3333/meds"}
+                      value={`/dashboard/prescriptions/${prescription.id}`}
                       size={64}
                       bgColor="transparent"
                       fgColor={colorScheme.text.replace("text-", "#")}
@@ -111,7 +152,7 @@ export function PrescriptionCard({
                     />
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>Scan using our moboile app</p>
+                    <p>Scan using our mobile app</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -153,9 +194,9 @@ export function PrescriptionCard({
             id={`prescription-${prescription.id}-medications`}
           >
             <ul className="space-y-4">
-              {prescription.medications.map((medication, index) => (
+              {prescription.medications.map((medication: any, index: number) => (
                 <motion.li
-                  key={medication.id}
+                  key={index}
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ duration: 0.3, delay: index * 0.1 }}
@@ -171,7 +212,7 @@ export function PrescriptionCard({
                     Dosage: {medication.dosage}
                   </p>
                   <p className={`text-sm ${colorScheme.text}`}>
-                    Duration: {medication.duration}
+                    Duration: {medication.duration} days
                   </p>
                   {medication.additionalInstructions && (
                     <p className={`text-sm ${colorScheme.text} mt-2`}>

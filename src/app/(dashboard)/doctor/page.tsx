@@ -4,7 +4,6 @@ import { useEffect, useState } from "react"
 import Image from "next/image"
 import { motion } from "framer-motion"
 import {
-  Award,
   Briefcase,
   Clock,
   DollarSign,
@@ -19,7 +18,9 @@ import {
   User,
   Zap,
 } from "lucide-react"
+import { ethers } from "ethers"
 
+import { getMedicalContract, getSigner } from "@/lib/web3"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -32,24 +33,8 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { useToast } from "@/components/ui/use-toast"
 import { Icons } from "@/components/icons"
-
-// Mock doctor data (replace with actual data fetching logic)
-const doctorData = {
-  id: 1,
-  userId: "doc123",
-  name: "Dr. Jane Smith",
-  email: "jane.smith@example.com",
-  image: "/placeholder.svg?height=100&width=100",
-  gender: "Female",
-  phoneNumber: "+1 (555) 987-6543",
-  specialty: "Cardiologist",
-  qualifications: ["MBBS", "MD", "FACC"],
-  experience: 15,
-  rating: 4.8,
-  blockId: "block456",
-  balance: 10000,
-}
 
 // Mock patient data
 const patients = [
@@ -58,18 +43,14 @@ const patients = [
     name: "John Doe",
     lastVisit: new Date("2023-05-20"),
     image: "/placeholder.svg?height=50&width=50",
+    address: "0x...", // Add patient address
   },
   {
     id: 2,
     name: "Alice Johnson",
     lastVisit: new Date("2023-05-18"),
     image: "/placeholder.svg?height=50&width=50",
-  },
-  {
-    id: 3,
-    name: "Bob Williams",
-    lastVisit: new Date("2023-05-15"),
-    image: "/placeholder.svg?height=50&width=50",
+    address: "0x...", // Add patient address
   },
 ]
 
@@ -93,50 +74,200 @@ const doctorBenefits = [
 ]
 
 export default function DoctorProfile() {
-  const [appointments, setAppointments] = useState<any[]>([])
   const [isDarkMode, setIsDarkMode] = useState(false)
-  const [balance, setBalance] = useState(doctorData.balance)
+  const [medicalContract, setMedicalContract] = useState<ethers.Contract | null>(null)
+  const [doctor, setDoctor] = useState<any>(null)
+  const [isRegistered, setIsRegistered] = useState(false)
+  const [balance, setBalance] = useState(0)
   const [withdrawAmount, setWithdrawAmount] = useState("")
+  const { toast } = useToast()
+
+  // Registration form state
+  const [name, setName] = useState("")
+  const [speciality, setSpeciality] = useState("")
+  const [fees, setFees] = useState("")
+
+  // Prescription form state
+  const [patientAddress, setPatientAddress] = useState("")
+  const [medicationName, setMedicationName] = useState("")
+  const [dosage, setDosage] = useState("")
+  const [duration, setDuration] = useState("")
+  const [additionalInstructions, setAdditionalInstructions] = useState("")
+  const [diagnosis, setDiagnosis] = useState("")
 
   useEffect(() => {
-    // Fetch appointments
-    // This is a mock implementation. Replace with actual API calls.
-    setAppointments([
-      {
-        id: 1,
-        patientName: "John Doe",
-        startTime: new Date("2023-06-10T10:00:00"),
-        status: "CONFIRMED",
-      },
-      {
-        id: 2,
-        patientName: "Alice Johnson",
-        startTime: new Date("2023-06-10T14:30:00"),
-        status: "PENDING",
-      },
-      {
-        id: 3,
-        patientName: "Bob Williams",
-        startTime: new Date("2023-06-11T11:00:00"),
-        status: "CONFIRMED",
-      },
-    ])
-  }, [])
+    const init = async () => {
+      try {
+        const contract = await getMedicalContract()
+        setMedicalContract(contract)
+        const signer = await getSigner()
+        if (contract && signer) {
+          const doctorAddress = await signer.getAddress()
+          const doctorData = await contract.doctors(doctorAddress)
+          if (doctorData.verified) {
+            const formattedBalance = parseFloat(ethers.formatUnits(doctorData.tokenBalance, 18))
+            setDoctor({
+              name: doctorData.name,
+              specialty: doctorData.speciality,
+              fees: ethers.formatUnits(doctorData.fees, 18),
+              tokenBalance: formattedBalance,
+              doctorAddress: doctorData.doctorAddress,
+              email: "jane.smith@example.com", // Mock data
+              phoneNumber: "+1 (555) 987-6543", // Mock data
+              experience: 15, // Mock data
+              rating: 4.8, // Mock data
+              qualifications: ["MBBS", "MD", "FACC"], // Mock data
+              image: "/placeholder.svg?height=100&width=100", // Mock data
+            })
+            setIsRegistered(true)
+            setBalance(formattedBalance)
+          }
+        }
+      } catch (error) {
+        console.error("Error initializing doctor profile:", error)
+        toast({
+          title: "Error",
+          description: "Failed to load doctor profile.",
+          variant: "destructive",
+        })
+      }
+    }
+    init()
+  }, [toast])
 
   const toggleDarkMode = () => {
     setIsDarkMode(!isDarkMode)
     document.documentElement.classList.toggle("dark")
   }
 
-  const handleWithdraw = () => {
-    const amount = parseFloat(withdrawAmount)
-    if (!isNaN(amount) && amount > 0 && amount <= balance) {
-      setBalance((prevBalance) => prevBalance - amount)
-      setWithdrawAmount("")
+  const handleRegister = async () => {
+    if (medicalContract && name && speciality && fees) {
+      try {
+        const feesInWei = ethers.parseUnits(fees, 18)
+        const tx = await medicalContract.registerDoctor(name, speciality, feesInWei)
+        await tx.wait()
+        toast({
+          title: "Success",
+          description: "You have been registered successfully.",
+        })
+        // Refresh data
+        const signer = await getSigner()
+        if (signer) {
+          const doctorAddress = await signer.getAddress()
+          const doctorData = await medicalContract.doctors(doctorAddress)
+          const formattedBalance = parseFloat(ethers.formatUnits(doctorData.tokenBalance, 18))
+          setDoctor({
+            name: doctorData.name,
+            specialty: doctorData.speciality,
+            fees: ethers.formatUnits(doctorData.fees, 18),
+            tokenBalance: formattedBalance,
+            doctorAddress: doctorData.doctorAddress,
+            email: "jane.smith@example.com",
+            phoneNumber: "+1 (555) 987-6543",
+            experience: 15,
+            rating: 4.8,
+            qualifications: ["MBBS", "MD", "FACC"],
+            image: "/placeholder.svg?height=100&width=100",
+          })
+          setIsRegistered(true)
+          setBalance(formattedBalance)
+        }
+      } catch (error: any) {
+        console.error("Registration failed:", error)
+        toast({
+          title: "Registration Failed",
+          description: error.message || "An error occurred during registration.",
+          variant: "destructive",
+        })
+      }
     }
   }
 
-  
+  const handleWithdraw = async () => {
+    const amount = parseFloat(withdrawAmount)
+    if (!isNaN(amount) && amount > 0 && medicalContract) {
+      try {
+        const amountInWei = ethers.parseUnits(withdrawAmount, 18)
+        const tx = await medicalContract.withdrawTokens(amountInWei)
+        await tx.wait()
+        toast({
+          title: "Success",
+          description: "Withdrawal successful.",
+        })
+        // Refresh balance
+        const signer = await getSigner()
+        if (signer) {
+          const doctorAddress = await signer.getAddress()
+          const doctorData = await medicalContract.doctors(doctorAddress)
+          setBalance(parseFloat(ethers.formatUnits(doctorData.tokenBalance, 18)))
+        }
+        setWithdrawAmount("")
+      } catch (error: any) {
+        console.error("Withdrawal failed:", error)
+        toast({
+          title: "Withdrawal Failed",
+          description: error.message || "An error occurred during withdrawal.",
+          variant: "destructive",
+        })
+      }
+    }
+  }
+
+  const handleIssuePrescription = async () => {
+    if (medicalContract && patientAddress && medicationName && dosage && duration && diagnosis) {
+      try {
+        const medications = [{
+          name: medicationName,
+          dosage,
+          duration: parseInt(duration),
+          additionalInstructions,
+        }]
+        const tx = await medicalContract.issuePrescription(patientAddress, medications, diagnosis)
+        await tx.wait()
+        toast({
+          title: "Success",
+          description: "Prescription issued successfully.",
+        })
+        // Clear form
+        setPatientAddress("")
+        setMedicationName("")
+        setDosage("")
+        setDuration("")
+        setAdditionalInstructions("")
+        setDiagnosis("")
+      } catch (error: any) {
+        console.error("Failed to issue prescription:", error)
+        toast({
+          title: "Failed to Issue Prescription",
+          description: error.message || "An error occurred.",
+          variant: "destructive",
+        })
+      }
+    }
+  }
+
+  if (!isRegistered) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-100">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle>Register as a Doctor</CardTitle>
+            <CardDescription>
+              Join our platform to manage your patients and earnings securely.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Input placeholder="Full Name" value={name} onChange={(e) => setName(e.target.value)} />
+            <Input placeholder="Speciality" value={speciality} onChange={(e) => setSpeciality(e.target.value)} />
+            <Input type="number" placeholder="Consultation Fees (in HTK)" value={fees} onChange={(e) => setFees(e.target.value)} />
+          </CardContent>
+          <CardFooter>
+            <Button onClick={handleRegister} className="w-full">Register</Button>
+          </CardFooter>
+        </Card>
+      </div>
+    )
+  }
 
   return (
     <div className={`min-h-screen ${isDarkMode ? "dark" : ""}`}>
@@ -158,86 +289,88 @@ export default function DoctorProfile() {
           </Button>
         </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-        >
-          <Card className="relative flex justify-between">
-            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-              <Icons.logo className="size-2/3 opacity-20 duration-300 hover:animate-pulse" />
-            </div>
-            <div>
-              <CardHeader className="flex flex-row items-center space-x-4">
-                <motion.div
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                >
-                  <Avatar className="size-20">
-                    <AvatarImage src={doctorData.image} alt={doctorData.name} />
-                    <AvatarFallback>{doctorData.name.charAt(0)}</AvatarFallback>
-                  </Avatar>
-                </motion.div>
-                <div>
-                  <CardTitle className="text-2xl">{doctorData.name}</CardTitle>
-                  <CardDescription>{doctorData.specialty}</CardDescription>
-                </div>
-              </CardHeader>
-              <CardContent className="grid gap-4">
-                <InfoItem
-                  icon={<Mail className="text-green-500 dark:text-green-400" />}
-                  label="Email"
-                  value={doctorData.email}
-                />
-                <InfoItem
-                  icon={<Phone className="text-blue-500 dark:text-blue-400" />}
-                  label="Phone"
-                  value={doctorData.phoneNumber}
-                />
-                <InfoItem
-                  icon={
-                    <Briefcase className="text-purple-500 dark:text-purple-400" />
-                  }
-                  label="Experience"
-                  value={`${doctorData.experience} years`}
-                />
-                <div>
-                  <h3 className="mb-2 text-lg font-semibold">Qualifications</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {doctorData.qualifications.map((qual, index) => (
-                      <motion.div
-                        key={index}
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                      >
-                        <Badge
-                          variant="secondary"
-                          className="bg-blue-200 text-blue-800 dark:bg-blue-900 dark:text-blue-100"
-                        >
-                          {qual}
-                        </Badge>
-                      </motion.div>
-                    ))}
+        {doctor && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            <Card className="relative flex justify-between">
+              <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+                <Icons.logo className="size-2/3 opacity-20 duration-300 hover:animate-pulse" />
+              </div>
+              <div>
+                <CardHeader className="flex flex-row items-center space-x-4">
+                  <motion.div
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
+                  >
+                    <Avatar className="size-20">
+                      <AvatarImage src={doctor.image} alt={doctor.name} />
+                      <AvatarFallback>{doctor.name.charAt(0)}</AvatarFallback>
+                    </Avatar>
+                  </motion.div>
+                  <div>
+                    <CardTitle className="text-2xl">{doctor.name}</CardTitle>
+                    <CardDescription>{doctor.specialty}</CardDescription>
                   </div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Star className="text-yellow-500" />
-                  <span className="font-semibold">{doctorData.rating}</span>
-                  <span className="text-muted-foreground">
-                    ({Math.floor(Math.random() * 500) + 100} reviews)
-                  </span>
-                </div>
-              </CardContent>
-            </div>
-            <Image
-              src="/illustrations/doctor-3.svg"
-              alt="Health Journey Visualization"
-              width={400}
-              height={300}
-              className="hidden rounded-lg shadow-lg lg:block"
-            />
-          </Card>
-        </motion.div>
+                </CardHeader>
+                <CardContent className="grid gap-4">
+                  <InfoItem
+                    icon={<Mail className="text-green-500 dark:text-green-400" />}
+                    label="Email"
+                    value={doctor.email}
+                  />
+                  <InfoItem
+                    icon={<Phone className="text-blue-500 dark:text-blue-400" />}
+                    label="Phone"
+                    value={doctor.phoneNumber}
+                  />
+                  <InfoItem
+                    icon={
+                      <Briefcase className="text-purple-500 dark:text-purple-400" />
+                    }
+                    label="Experience"
+                    value={`${doctor.experience} years`}
+                  />
+                  <div>
+                    <h3 className="mb-2 text-lg font-semibold">Qualifications</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {doctor.qualifications.map((qual: string, index: number) => (
+                        <motion.div
+                          key={index}
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                        >
+                          <Badge
+                            variant="secondary"
+                            className="bg-blue-200 text-blue-800 dark:bg-blue-900 dark:text-blue-100"
+                          >
+                            {qual}
+                          </Badge>
+                        </motion.div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Star className="text-yellow-500" />
+                    <span className="font-semibold">{doctor.rating}</span>
+                    <span className="text-muted-foreground">
+                      ({Math.floor(Math.random() * 500) + 100} reviews)
+                    </span>
+                  </div>
+                </CardContent>
+              </div>
+              <Image
+                src="/illustrations/doctor-3.svg"
+                alt="Health Journey Visualization"
+                width={400}
+                height={300}
+                className="hidden rounded-lg shadow-lg lg:block"
+              />
+            </Card>
+          </motion.div>
+        )}
 
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -278,38 +411,16 @@ export default function DoctorProfile() {
           >
             <Card>
               <CardHeader>
-                <CardTitle className="text-xl">Recent Patients</CardTitle>
+                <CardTitle className="text-xl">Issue Prescription</CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {patients.map((patient, index) => (
-                    <motion.div
-                      key={patient.id}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ duration: 0.3, delay: index * 0.1 }}
-                      className="flex items-center justify-between"
-                    >
-                      <div className="flex items-center space-x-4">
-                        <Avatar>
-                          <AvatarImage src={patient.image} alt={patient.name} />
-                          <AvatarFallback>
-                            {patient.name.charAt(0)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <h4 className="font-semibold">{patient.name}</h4>
-                          <p className="text-sm text-muted-foreground">
-                            Last visit: {patient.lastVisit.toLocaleDateString()}
-                          </p>
-                        </div>
-                      </div>
-                      <Button variant="outline" size="sm">
-                        View Records
-                      </Button>
-                    </motion.div>
-                  ))}
-                </div>
+              <CardContent className="space-y-4">
+                <Input placeholder="Patient Address" value={patientAddress} onChange={(e) => setPatientAddress(e.target.value)} />
+                <Input placeholder="Diagnosis" value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} />
+                <Input placeholder="Medication Name" value={medicationName} onChange={(e) => setMedicationName(e.target.value)} />
+                <Input placeholder="Dosage (e.g., 500mg)" value={dosage} onChange={(e) => setDosage(e.target.value)} />
+                <Input type="number" placeholder="Duration (in days)" value={duration} onChange={(e) => setDuration(e.target.value)} />
+                <Input placeholder="Additional Instructions" value={additionalInstructions} onChange={(e) => setAdditionalInstructions(e.target.value)} />
+                <Button onClick={handleIssuePrescription} className="w-full">Issue Prescription</Button>
               </CardContent>
             </Card>
           </motion.div>
@@ -327,7 +438,7 @@ export default function DoctorProfile() {
                 <div className="mb-4 flex items-center justify-between">
                   <div className="flex items-center text-3xl font-bold">
                     <DollarSign className="mr-2 text-green-500 dark:text-green-400" />
-                    {balance.toFixed(2)}
+                    {balance.toFixed(2)} HTK
                   </div>
                   <div className="flex items-center space-x-2">
                     <Input
@@ -345,80 +456,16 @@ export default function DoctorProfile() {
                     </Button>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <span>This Week</span>
-                    <span className="font-semibold">
-                      ${(Math.random() * 2000 + 1000).toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>This Month</span>
-                    <span className="font-semibold">
-                      ${(Math.random() * 8000 + 4000).toFixed(2)}
-                    </span>
-                  </div>
-                </div>
               </CardContent>
             </Card>
           </motion.div>
         </div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.6 }}
-        >
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-xl">Upcoming Appointments</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {appointments.map((appointment, index) => (
-                <motion.div
-                  key={appointment.id}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.3, delay: index * 0.1 }}
-                  className="flex items-center justify-between py-2"
-                >
-                  <div className="flex items-center space-x-2">
-                    <Clock className="text-blue-500 dark:text-blue-400" />
-                    <div>
-                      <p className="font-semibold">{appointment.patientName}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {appointment.startTime.toLocaleString()}
-                      </p>
-                    </div>
-                  </div>
-                  <Badge
-                    variant={
-                      appointment.status === "CONFIRMED"
-                        ? "default"
-                        : "destructive"
-                    }
-                  >
-                    {appointment.status}
-                  </Badge>
-                </motion.div>
-              ))}
-              <motion.div
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-              >
-                <Button className="mt-4 w-full bg-blue-500 text-white hover:bg-blue-600">
-                  View All Appointments
-                </Button>
-              </motion.div>
-            </CardContent>
-          </Card>
-        </motion.div>
       </div>
     </div>
   )
 }
 
-function InfoItem({ icon, label, value }) {
+function InfoItem({ icon, label, value }: { icon: React.ReactNode, label: string, value: string }) {
   return (
     <motion.div
       className="flex items-center space-x-2"

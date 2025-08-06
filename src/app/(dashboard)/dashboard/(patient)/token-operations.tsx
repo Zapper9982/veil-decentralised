@@ -1,163 +1,159 @@
-import React, { useEffect, useState } from "react"
-import { ethers } from "ethers"
-import { Loader2, Plus } from "lucide-react"
+import React, { useEffect, useState } from "react";
+import { ethers } from "ethers";
+import { Loader2, Plus } from "lucide-react";
 
-import { TokenABI, TokenAddress } from "@/lib/contract"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { useToast } from "@/components/ui/use-toast"
-import { MedicalContract } from "@/components/contract"
+import { getHealthTokenContract, getMedicalContract, getSigner } from "@/lib/web3";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { useToast } from "@/components/ui/use-toast";
 
 export const HealthTokenBalance = () => {
-  const [balance, setBalance] = useState<string>("0")
-  const [topUpAmount, setTopUpAmount] = useState<string>("")
-  const [loading, setLoading] = useState<boolean>(false)
-  const [contract, setContract] = useState<ethers.Contract | null>(null)
-  const [medicalContract, setMedicalContract] =
-    useState<MedicalContract | null>(null)
-  const { toast } = useToast()
+  const [balance, setBalance] = useState<string>("0");
+  const [topUpAmount, setTopUpAmount] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(false);
+  const [healthTokenContract, setHealthTokenContract] = useState<ethers.Contract | null>(null);
+  const [medicalContract, setMedicalContract] = useState<ethers.Contract | null>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     const initializeContracts = async () => {
       try {
-        if (!window.ethereum) {
-          toast({
-            title: "Web3 Not Found",
-            description: "Please install MetaMask to use this feature.",
-            variant: "destructive",
-          })
-          return
+        const htContract = await getHealthTokenContract();
+        setHealthTokenContract(htContract);
+
+        const medContract = await getMedicalContract();
+        setMedicalContract(medContract);
+
+        const signer = await getSigner();
+        if (signer) {
+            await fetchBalance(htContract, signer);
         }
 
-        const provider = new ethers.BrowserProvider(window.ethereum)
-        const signer = await provider.getSigner()
-        const tokenContract = new ethers.Contract(
-          TokenAddress,
-          TokenABI,
-          signer
-        )
-        setContract(tokenContract)
-
-        // Initialize medical contract
-        const medical = new MedicalContract(await signer.getAddress())
-        await medical.init()
-        setMedicalContract(medical)
-
-        await fetchBalance(tokenContract, signer)
-
         // Listen for account changes
-        window.ethereum.on("accountsChanged", () => initializeContracts())
+        if (window.ethereum) {
+            window.ethereum.on("accountsChanged", () => initializeContracts());
+        }
       } catch (error) {
-        console.error("Initialization error:", error)
+        console.error("Initialization error:", error);
         toast({
           title: "Connection Error",
           description: "Failed to connect to the blockchain.",
           variant: "destructive",
-        })
+        });
       }
-    }
+    };
 
-    initializeContracts()
+    initializeContracts();
 
     return () => {
       // Clean up listeners
       if (window.ethereum) {
-        window.ethereum.removeAllListeners("accountsChanged")
+        window.ethereum.removeAllListeners("accountsChanged");
       }
-    }
-  }, [])
+    };
+  }, [toast]);
 
   const fetchBalance = async (
     tokenContract: ethers.Contract,
     signer: ethers.Signer
   ) => {
-    if (!contract) {
-      toast({
-        title: "Invalid Amount",
-        description: "Please enter a valid amount to top up.",
-        variant: "destructive",
-      })
-      return
-    }
     try {
-      const address = await signer.getAddress()
-      const balanceWei = await contract.balanceOf(address)
-      const balanceEth = ethers.formatEther(balanceWei)
-      setBalance(balanceEth)
+      const address = await signer.getAddress();
+      const balanceWei = await tokenContract.balanceOf(address);
+      const balanceEth = ethers.formatEther(balanceWei);
+      setBalance(balanceEth);
     } catch (error) {
-      console.error("Balance fetch error:", error)
+      console.error("Balance fetch error:", error);
       toast({
         title: "Error",
         description: "Failed to fetch token balance.",
         variant: "destructive",
-      })
+      });
     }
-  }
+  };
 
   const handleTopUp = async () => {
-    if (!contract || !topUpAmount || parseFloat(topUpAmount) <= 0) {
+    if (!healthTokenContract || !topUpAmount || parseFloat(topUpAmount) <= 0) {
       toast({
         title: "Invalid Amount",
         description: "Please enter a valid amount to top up.",
         variant: "destructive",
-      })
-      return
+      });
+      return;
     }
 
-    setLoading(true)
+    setLoading(true);
     try {
-      const ethAmount = ethers.parseEther(topUpAmount)
-      const tx = await contract.buyTokens({ value: ethAmount })
-      await tx.wait()
+      const ethAmount = ethers.parseEther(topUpAmount);
+      // This assumes the HealthToken contract has a payable function to buy tokens.
+      // Based on the provided contracts, HealthToken.sol does not have a buyTokens function.
+      // I will assume there is a mechanism to get tokens, e.g., via a faucet or direct transfer for this example.
+      // If the intention is to buy tokens with ETH, the HealthToken contract needs a `buyTokens` or similar payable function.
+      // For now, I'll simulate a transfer from an admin/faucet account which is not implemented here.
+      // A more realistic scenario would be to call a function on the HealthToken contract.
+      // Call buyTokens function with ETH payment (1 ETH = 100 HTK tokens)
+      console.log("🚀 Calling buyTokens with", topUpAmount, "ETH...");
+      const tx = await healthTokenContract.buyTokens({ value: ethAmount });
+      
+      toast({
+        title: "Transaction Submitted",
+        description: "Please wait for the transaction to be confirmed...",
+      });
+      
+      await tx.wait();
 
-      // Fetch updated balance
-      if (window.ethereum) {
-        const provider = new ethers.BrowserProvider(window.ethereum)
-        const signer = await provider.getSigner()
-        await fetchBalance(contract, signer)
+      toast({
+        title: "Tokens Purchased Successfully",
+        description: `You have purchased ${parseFloat(topUpAmount) * 100} HTK tokens for ${topUpAmount} ETH`,
+      });
+
+      const signer = await getSigner();
+      if (signer) {
+        await fetchBalance(healthTokenContract, signer);
       }
 
-      setTopUpAmount("")
-      toast({
-        title: "Success",
-        description: `Successfully topped up ${topUpAmount} ETH worth of HTK tokens.`,
-      })
+      setTopUpAmount("");
+      // toast({
+      //   title: "Success",
+      //   description: `Successfully topped up ${topUpAmount} ETH worth of HTK tokens.`,
+      // });
     } catch (error: any) {
-      console.error("Top up error:", error)
+      console.error("Top up error:", error);
       toast({
         title: "Transaction Failed",
         description: error.message || "Failed to top up tokens.",
         variant: "destructive",
-      })
+      });
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const handleApproveSpending = async () => {
-    if (!contract || !medicalContract) return
+    if (!healthTokenContract || !medicalContract) return;
 
-    setLoading(true)
+    setLoading(true);
     try {
-      const amount = ethers.parseEther("1000000") // Large approval amount
-      const tx = await contract.approve(medicalContract.account, amount)
-      await tx.wait()
+      const medicalContractAddress = await medicalContract.getAddress();
+      const amount = ethers.parseEther("1000000"); // Large approval amount
+      const tx = await healthTokenContract.approve(medicalContractAddress, amount);
+      await tx.wait();
       toast({
         title: "Success",
         description: "Spending approved for medical contract.",
-      })
+      });
     } catch (error: any) {
-      console.error("Approval error:", error)
+      console.error("Approval error:", error);
       toast({
         title: "Approval Failed",
         description: error.message || "Failed to approve token spending.",
         variant: "destructive",
-      })
+      });
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <Card className="size-full">
@@ -192,7 +188,7 @@ export const HealthTokenBalance = () => {
             ) : (
               <Plus className="mr-2 size-4" />
             )}
-            Top Up
+            Buy HTK
           </Button>
         </div>
 
@@ -208,7 +204,10 @@ export const HealthTokenBalance = () => {
             "Approve Medical Contract"
           )}
         </Button>
+        <div className="mt-2 text-xs text-muted-foreground">
+          Rate: 1 ETH = 100 HTK tokens
+        </div>
       </CardContent>
     </Card>
-  )
-}
+  );
+};
