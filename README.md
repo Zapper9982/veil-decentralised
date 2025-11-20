@@ -569,39 +569,7 @@ const proof = await generateZKProof({
   secretKey: "secret"
 });
 ```
-
 ---
-
-## 🤝 Contributing
-
-We welcome contributions from the community! Here's how you can help:
-
-### Getting Started
-
-1. **Fork the repository**
-2. **Create a feature branch**
-   ```bash
-   git checkout -b feature/amazing-feature
-   ```
-3. **Make your changes**
-4. **Commit with conventional commits**
-   ```bash
-   git commit -m "feat: add amazing feature"
-   ```
-5. **Push to your branch**
-   ```bash
-   git push origin feature/amazing-feature
-   ```
-6. **Open a Pull Request**
-
-### Contribution Guidelines
-
-- Follow the existing code style (ESLint + Prettier)
-- Write meaningful commit messages
-- Add tests for new features
-- Update documentation as needed
-- Ensure all tests pass before submitting PR
-
 ### Areas for Contribution
 
 - 🐛 **Bug Fixes**: Report or fix bugs
@@ -613,8 +581,6 @@ We welcome contributions from the community! Here's how you can help:
 
 ---
 
-## 🔒 Security
-
 ### Security Measures
 
 - **Smart Contract Audits**: Contracts audited for vulnerabilities
@@ -623,37 +589,7 @@ We welcome contributions from the community! Here's how you can help:
 - **Access Control**: Role-based permissions
 - **Secure Authentication**: MetaMask + NextAuth integration
 
-### Reporting Vulnerabilities
-
-If you discover a security vulnerability, please email:
-**security@veil-org.com**
-
-Do NOT open public issues for security vulnerabilities.
-
-### Best Practices for Users
-
-1. **Never share your private keys** or seed phrases
-2. **Verify contract addresses** before transactions
-3. **Use hardware wallets** for large amounts
-4. **Enable 2FA** where available
-5. **Keep software updated** (MetaMask, browser, etc.)
-
----
-
-## 📄 License
-
-This project is licensed under the **MIT License** - see the [LICENSE.md](LICENSE.md) file for details.
-
-```
-MIT License
-
-Copyright (c) 2024 Veil
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software")...
-```
-
----
+ ---
 
 ## 🙏 Acknowledgments
 
@@ -667,50 +603,6 @@ of this software and associated documentation files (the "Software")...
 - **[OpenZeppelin](https://openzeppelin.com/)** - Secure smart contract libraries
 - **[ZoKrates](https://zokrates.github.io/)** - Zero-knowledge proof toolkit
 - **[IPFS](https://ipfs.io/)** - Decentralized storage concepts
-
-### Community
-Special thanks to all contributors and the open-source community for making this project possible!
-
----
-
-## 📞 Contact & Support
-
-### Links
-- **Website**: [veil-org.vercel.app](https://veil-org.vercel.app)
-- **GitHub**: [github.com/rohansen856/Veil](https://github.com/rohansen856/Veil)
-- **Twitter**: [@Med-Block](https://twitter.com/Med-Block)
-
-### Get Help
-- 📖 [Documentation](https://veil-org.vercel.app/docs)
-- 💬 [Discord Community](https://discord.gg/veil) (Coming Soon)
-- 🐛 [Issue Tracker](https://github.com/rohansen856/Veil/issues)
-- 📧 Email: support@veil-org.com
-
----
-
-## 🗺️ Roadmap
-
-### Q1 2025
-- [ ] Multi-chain support (Polygon, BSC, Arbitrum)
-- [ ] Mobile application (React Native)
-- [ ] Enhanced AI diagnostics
-
-### Q2 2025
-- [ ] IPFS integration for medical imaging
-- [ ] Telemedicine video consultations
-- [ ] Insurance claim automation
-
-### Q3 2025
-- [ ] DAO governance implementation
-- [ ] Staking rewards for HTK holders
-- [ ] Healthcare provider network expansion
-
-### Q4 2025
-- [ ] Wearable device integrations
-- [ ] Advanced analytics dashboard
-- [ ] Regulatory compliance certifications
-
----
 
 ## 📊 Stats
 
