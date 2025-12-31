@@ -202,22 +202,56 @@ export async function GET(req: Request) {
     })
 
     // Get appropriate ID based on user role
-    const userProfile =
-      userData?.role === "doctor"
-        ? await db.doctor.findFirst({ where: { userId: user.id } })
-        : await db.patient.findFirst({ where: { userId: user.id } })
+    let userProfile: any
+    let effectiveRole = userData?.role
+
+    if (userData?.role === "doctor") {
+      userProfile = await db.doctor.findFirst({ where: { userId: user.id } })
+    } else {
+      userProfile = await db.patient.findFirst({ where: { userId: user.id } })
+    }
+
+    // Fallback: If profile not found for assigned role, try the other one
+    // This handles cases where user.role is 'patient' but they are accessing 'doctor' features
+    if (!userProfile) {
+      console.log("DEBUG: Profile not found for role", userData?.role, "- attempting fallback lookup")
+      if (userData?.role === "patient") {
+        const docProfile = await db.doctor.findFirst({ where: { userId: user.id } })
+        if (docProfile) {
+          userProfile = docProfile
+          effectiveRole = "doctor"
+          console.log("DEBUG: Found Doctor profile instead. Switching effective role to doctor.")
+        }
+      } else {
+        const patProfile = await db.patient.findFirst({ where: { userId: user.id } })
+        if (patProfile) {
+          userProfile = patProfile
+          effectiveRole = "patient"
+          console.log("DEBUG: Found Patient profile instead. Switching effective role to patient.")
+        }
+      }
+    }
+
+    console.log("DEBUG: GET /api/appointments")
+    console.log("DEBUG: User ID:", user.id)
+    console.log("DEBUG: DB Role:", userData?.role)
+    console.log("DEBUG: Effective Role:", effectiveRole)
+    console.log("DEBUG: Profile ID:", userProfile?.id)
 
     if (!userProfile) {
+      console.log("DEBUG: Profile not found")
       return new Response("Profile not found", { status: 404 })
     }
 
     // Build query based on user role
     const where = {
-      ...(userData?.role === "doctor"
+      ...(effectiveRole === "doctor"
         ? { doctorId: userProfile.id }
         : { patientId: userProfile.id }),
       ...(status && { status: status }),
     }
+
+    console.log("DEBUG: Query where:", JSON.stringify(where))
 
     const appointments = await db.appointment.findMany({
       where,
@@ -247,6 +281,8 @@ export async function GET(req: Request) {
       take: limit,
       skip: offset,
     })
+
+    console.log("DEBUG: Appointments found:", appointments.length)
 
     const total = await db.appointment.count({ where })
 

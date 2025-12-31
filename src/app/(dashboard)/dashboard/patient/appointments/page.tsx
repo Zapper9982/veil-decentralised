@@ -44,8 +44,7 @@ export default async function Appointments() {
   const user = await getCurrentUser()
   if (!user || !user.id) return redirect("/login")
 
-  const appointments =
-    /* await db.appointment.findMany({
+  const appointments = await db.appointment.findMany({
     where: {
       patient: {
         userId: user.id,
@@ -54,12 +53,17 @@ export default async function Appointments() {
     select: {
       startTime: true,
       endTime: true,
+      proposedTime: true,
       id: true,
       doctorId: true,
       status: true,
+      locationRevealed: true,
+      doctorMessage: true,
       doctor: {
         select: {
           mbbsId: true,
+          clinicName: true,
+          clinicAddress: true,
           user: {
             select: {
               name: true,
@@ -68,74 +72,10 @@ export default async function Appointments() {
         },
       },
     },
-  }) */
-    [
-      {
-        id: "1",
-        status: "PENDING", // Replace with appropriate $Enums.AppointmentStatus value
-        doctor: {
-          user: {
-            name: "Dr. Rohan Mehta",
-          },
-          mbbsId: "MBBS12345",
-        },
-        doctorId: "doc1",
-        startTime: new Date("2025-01-18T10:00:00Z"),
-        endTime: new Date("2025-01-18T10:30:00Z"),
-      },
-      {
-        id: "2",
-        status: "CONFIRMED", // Replace with appropriate $Enums.AppointmentStatus value
-        doctor: {
-          user: {
-            name: "Dr. Priya Sharma",
-          },
-          mbbsId: "MBBS67890",
-        },
-        doctorId: "doc2",
-        startTime: new Date("2025-01-17T15:00:00Z"),
-        endTime: new Date("2025-01-17T15:30:00Z"),
-      },
-      {
-        id: "3",
-        status: "CANCELLED", // Replace with appropriate $Enums.AppointmentStatus value
-        doctor: {
-          user: {
-            name: "Dr. Ankit Patel",
-          },
-          mbbsId: "MBBS11223",
-        },
-        doctorId: "doc3",
-        startTime: new Date("2025-01-19T09:00:00Z"),
-        endTime: new Date("2025-01-19T09:30:00Z"),
-      },
-      {
-        id: "4",
-        status: "PENDING", // Replace with appropriate $Enums.AppointmentStatus value
-        doctor: {
-          user: {
-            name: null, // Doctor's name not provided
-          },
-          mbbsId: "MBBS44556",
-        },
-        doctorId: "doc4",
-        startTime: new Date("2025-01-20T14:00:00Z"),
-        endTime: new Date("2025-01-20T14:30:00Z"),
-      },
-      {
-        id: "5",
-        status: "InProgress", // Replace with appropriate $Enums.AppointmentStatus value
-        doctor: {
-          user: {
-            name: "Dr. Kavita Rao",
-          },
-          mbbsId: "MBBS77889",
-        },
-        doctorId: "doc5",
-        startTime: new Date("2025-01-18T12:00:00Z"),
-        endTime: new Date("2025-01-18T12:30:00Z"),
-      },
-    ]
+    orderBy: {
+      updatedAt: 'desc'
+    }
+  })
 
   const upcomingAppointments = appointments.filter(
     (appointment) => new Date(appointment.startTime) >= new Date()

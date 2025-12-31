@@ -35,13 +35,26 @@ export default async function DashboardLayout({
     },
   })) ?? { role: null }
 
-  if (!role || role == "unset") return redirect("/verification")
+  let effectiveRole = role
 
-  if (role == "doctor") redirect("/doctor")
+  // Fallback: Check for doctor profile if role is patient but they might be a doctor
+  if (role === "patient" || role === "unset") {
+    const doctorProfile = await db.doctor.findFirst({ where: { userId: user.id } })
+    if (doctorProfile) {
+      effectiveRole = "doctor"
+    }
+  }
+
+  if (!effectiveRole || effectiveRole == "unset") return redirect("/verification")
+
+  // if (role == "doctor") redirect("/doctor") // Allow doctors to stay in this layout for now
+
+  // Combine user data with role for the sidebar
+  const userWithRole = { ...user, role: effectiveRole || undefined } as User & { role?: string }
 
   return (
     <SidebarProvider>
-      <DashboardSidebar user={user as User} />
+      <DashboardSidebar user={userWithRole} />
       <div className="w-full bg-background">
         <header className="flex h-16 items-center justify-between border-b p-4 pr-12 lg:pr-24">
           <div className="flex items-center gap-4">

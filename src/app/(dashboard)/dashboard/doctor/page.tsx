@@ -40,6 +40,16 @@ import { DashboardShell } from "@/components/shell"
 import { getHealthTokenContract, getSigner } from "@/lib/web3"
 import { ethers } from "ethers"
 import { useToast } from "@/components/ui/use-toast"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 
 // Doctor benefits data
 const doctorBenefits = [
@@ -71,6 +81,15 @@ export default function DoctorProfile() {
   const [walletConnected, setWalletConnected] = useState(false)
   const [currentNetwork, setCurrentNetwork] = useState("")
   const { toast } = useToast()
+
+  // Appointment handling state
+  const [selectedAppointment, setSelectedAppointment] = useState<any>(null)
+  const [isResponseDialogOpen, setIsResponseDialogOpen] = useState(false)
+  const [proposalData, setProposalData] = useState({
+    proposedTime: "",
+    estimatedDuration: 30,
+    message: ""
+  })
 
   useEffect(() => {
     // Fetch doctor data from database
@@ -116,26 +135,36 @@ export default function DoctorProfile() {
 
     fetchDoctorData()
 
-    // Fetch appointments and prescriptions
-    // This is a mock implementation. Replace with actual API calls.
-    setAppointments([
-      {
-        id: 1,
-        startTime: new Date("2023-06-10T10:00:00"),
-        status: "CONFIRMED",
-      },
-      { id: 2, startTime: new Date("2023-06-15T14:30:00"), status: "PENDING" },
-    ])
+    // Fetch appointments
+    const fetchAppointments = async () => {
+      try {
+        const res = await fetch("/api/appointments?status=PENDING_DOCTOR_RESPONSE")
+        if (res.ok) {
+          const response: any = await res.json()
+          console.log("Frontend Fetch Response:", response)
+          if (response.status === "success" && Array.isArray(response.data)) {
+            console.log("Setting appointments:", response.data)
+            setAppointments(response.data)
+          } else {
+            console.error("Invalid API response format:", response)
+            setAppointments([])
+          }
+        } else {
+          console.error("Fetch failed with status:", res.status)
+        }
+      } catch (error) {
+        console.error("Failed to fetch appointments:", error)
+      }
+    }
+
+    fetchAppointments()
+
+    // Mock prescriptions for now
     setPrescriptions([
       {
         id: "presc1",
         issueDate: new Date("2023-06-01"),
         validTill: new Date("2023-07-01"),
-      },
-      {
-        id: "presc2",
-        issueDate: new Date("2023-05-15"),
-        validTill: new Date("2023-06-15"),
       },
     ])
 
@@ -273,6 +302,90 @@ export default function DoctorProfile() {
     }
   }
 
+  const handleRejectAppointment = async (appointmentId: string) => {
+    try {
+      setIsLoading(true)
+      const res = await fetch(`/api/appointments/${appointmentId}/respond`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "reject",
+          message: "Doctor is unavailable at this time."
+        })
+      })
+
+      if (!res.ok) throw new Error("Failed to reject appointment")
+
+      toast({
+        title: "Appointment Rejected",
+        description: "The appointment has been cancelled.",
+      })
+
+      // Refresh list
+      const updated = appointments.filter(a => a.id !== appointmentId)
+      setAppointments(updated)
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to reject appointment",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleAcceptAppointment = async () => {
+    if (!selectedAppointment || !proposalData.proposedTime) {
+      toast({
+        title: "Error",
+        description: "Please select a proposed time",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      setIsLoading(true)
+      const res = await fetch(`/api/appointments/${selectedAppointment.id}/respond`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "accept",
+          proposedTime: proposalData.proposedTime,
+          estimatedDuration: proposalData.estimatedDuration,
+          message: proposalData.message
+        })
+      })
+
+      if (!res.ok) throw new Error("Failed to accept appointment")
+
+      const data: any = await res.json()
+
+      toast({
+        title: "Appointment Accepted",
+        description: "Time proposed to patient. Symptoms revealed.",
+      })
+
+      // Show symptoms (optional: could show in a dialog)
+      console.log("Decrypted Symptoms:", data.data.symptoms)
+
+      setIsResponseDialogOpen(false)
+      // Remove from pending list
+      setAppointments(prev => prev.filter(a => a.id !== selectedAppointment.id))
+      setSelectedAppointment(null)
+
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to accept appointment",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   return (
     <DashboardShell>
       <DashboardHeader
@@ -327,6 +440,7 @@ export default function DoctorProfile() {
                         {doctorData?.verified && (
                           <Badge className="mt-2 bg-green-500">Verified</Badge>
                         )}
+                        <p className="text-xs text-muted-foreground mt-1">ID: {doctorData?.id}</p>
                       </div>
                     </CardHeader>
                     <CardContent className="grid gap-4">
@@ -496,39 +610,65 @@ export default function DoctorProfile() {
                     </TabsList>
                     <TabsContent value="appointments">
                       <div className="space-y-4">
-                        {appointments.map((appointment, index) => (
-                          <motion.div
-                            key={appointment.id}
-                            initial={{ opacity: 0, x: -20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ duration: 0.3, delay: index * 0.1 }}
-                            className="flex items-center justify-between py-2"
-                          >
-                            <div className="flex items-center space-x-2">
-                              <Clock className="text-blue-500 dark:text-blue-400" />
-                              <span>
-                                {appointment.startTime.toLocaleString()}
-                              </span>
-                            </div>
-                            <Badge
-                              variant={
-                                appointment.status === "CONFIRMED"
-                                  ? "secondary"
-                                  : "destructive"
-                              }
+                        {appointments.length === 0 ? (
+                          <p className="text-center text-muted-foreground py-8">
+                            No pending appointment requests.
+                          </p>
+                        ) : (
+                          appointments.map((appointment, index) => (
+                            <motion.div
+                              key={appointment.id}
+                              initial={{ opacity: 0, x: -20 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ duration: 0.3, delay: index * 0.1 }}
                             >
-                              {appointment.status}
-                            </Badge>
-                          </motion.div>
-                        ))}
-                        <motion.div
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                        >
-                          <Button className="mt-4 w-full bg-green-500 text-white hover:bg-green-600">
-                            Schedule New Appointment
-                          </Button>
-                        </motion.div>
+                              <Card>
+                                <CardContent className="flex items-center justify-between p-4">
+                                  <div className="space-y-1">
+                                    <div className="flex items-center gap-2">
+                                      <h4 className="font-semibold">
+                                        Request #{appointment.id.slice(-4)}
+                                      </h4>
+                                      <Badge
+                                        variant={
+                                          appointment.urgencyLevel === "high" ? "destructive" :
+                                            appointment.urgencyLevel === "medium" ? "default" : "secondary"
+                                        }
+                                      >
+                                        {appointment.urgencyLevel}
+                                      </Badge>
+                                    </div>
+                                    <p className="text-sm text-muted-foreground">
+                                      Status: {appointment.status}
+                                    </p>
+                                    <p className="text-sm">
+                                      Preferred Times: {appointment.preferredTimes?.length || 0} options
+                                    </p>
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <Button
+                                      size="sm"
+                                      variant="default"
+                                      onClick={() => {
+                                        setSelectedAppointment(appointment)
+                                        setIsResponseDialogOpen(true)
+                                      }}
+                                    >
+                                      Review & Accept
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="destructive"
+                                      onClick={() => handleRejectAppointment(appointment.id)}
+                                    >
+                                      Reject
+                                    </Button>
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            </motion.div>
+                          ))
+                        )}
                       </div>
                     </TabsContent>
                     <TabsContent value="prescriptions">
@@ -574,6 +714,74 @@ export default function DoctorProfile() {
           </div>
         </div>
       )}
+
+      {/* Response Dialog */}
+      <Dialog open={isResponseDialogOpen} onOpenChange={setIsResponseDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Respond to Appointment Request</DialogTitle>
+            <DialogDescription>
+              Propose a time for this appointment. Encrypted symptoms will be revealed upon acceptance.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <h4 className="font-medium text-sm">Patient Preferences</h4>
+              <div className="bg-muted p-3 rounded-md text-sm">
+                <p><span className="font-semibold">Urgency:</span> {selectedAppointment?.urgencyLevel}</p>
+                <div className="mt-2">
+                  <p className="font-semibold mb-1">Preferred Times:</p>
+                  <ul className="list-disc pl-4 space-y-1">
+                    {selectedAppointment?.preferredTimes?.map((time: any, i: number) => (
+                      <li key={i}>{new Date(time).toLocaleString()}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="proposedTime">Proposed Time</Label>
+              <Input
+                id="proposedTime"
+                type="datetime-local"
+                value={proposalData.proposedTime}
+                onChange={(e) => setProposalData(prev => ({ ...prev, proposedTime: e.target.value }))}
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="duration">Estimated Duration (mins)</Label>
+              <Input
+                id="duration"
+                type="number"
+                value={proposalData.estimatedDuration}
+                onChange={(e) => setProposalData(prev => ({ ...prev, estimatedDuration: parseInt(e.target.value) }))}
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="message">Message (Optional)</Label>
+              <Textarea
+                id="message"
+                placeholder="Additional instructions for the patient..."
+                value={proposalData.message}
+                onChange={(e) => setProposalData(prev => ({ ...prev, message: e.target.value }))}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsResponseDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleAcceptAppointment} disabled={isLoading}>
+              {isLoading ? "Processing..." : "Propose Time & Accept"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardShell>
   )
 }

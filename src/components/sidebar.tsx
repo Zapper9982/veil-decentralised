@@ -6,6 +6,7 @@ import {
   Bell,
   BookOpen,
   Bot,
+  Briefcase,
   ChevronRight,
   ChevronsUpDown,
   Command,
@@ -72,52 +73,6 @@ import {
 import { Icons } from "./icons"
 
 const data = {
-  user: {
-    name: "shadmB",
-    email: "m@example.com",
-    avatar: "/avatars/shadmB.jpg",
-  },
-  navMain: [
-    {
-      title: "Dashboard",
-      url: "#",
-      icon: SquareTerminal,
-      isActive: true,
-      items: [
-        {
-          title: "Profile",
-          url: "/dashboard/patient/profile",
-        },
-        {
-          title: "Your Appointments",
-          url: "/dashboard/patient/appointments",
-        },
-        {
-          title: "Book appointments",
-          url: "/dashboard/patient/appointments/book",
-        },
-      ],
-    },
-    {
-      title: "Personal Details",
-      url: "#",
-      icon: Bot,
-      items: [
-        {
-          title: "Prescriptions",
-          url: "/dashboard/prescriptions",
-        },
-        {
-          title: "Medical History",
-          url: "/dashboard/personal-details",
-        },
-        {
-          title: "AI helper",
-          url: "#",
-        },
-      ],
-    },
-  ],
   navSecondary: [
     {
       title: "Support",
@@ -129,17 +84,95 @@ const data = {
       url: "#",
       icon: Send,
     },
-  ]
+  ],
 }
+
+const patientNav = [
+  {
+    title: "Dashboard",
+    url: "#",
+    icon: SquareTerminal,
+    isActive: true,
+    items: [
+      {
+        title: "Profile",
+        url: "/dashboard/patient/profile",
+      },
+      {
+        title: "Your Appointments",
+        url: "/dashboard/patient/appointments",
+      },
+      {
+        title: "Book appointments",
+        url: "/dashboard/patient/appointments/book",
+      },
+    ],
+  },
+  {
+    title: "Personal Details",
+    url: "#",
+    icon: Bot,
+    items: [
+      {
+        title: "Prescriptions",
+        url: "/dashboard/prescriptions",
+      },
+      {
+        title: "Medical History",
+        url: "/dashboard/personal-details",
+      },
+      {
+        title: "AI helper",
+        url: "#",
+      },
+    ],
+  },
+]
+
+const doctorNav = [
+  {
+    title: "Dashboard",
+    url: "/dashboard/doctor",
+    icon: SquareTerminal,
+    isActive: true,
+    items: [
+      {
+        title: "Overview",
+        url: "/dashboard/doctor",
+      },
+      {
+        title: "All Appointments",
+        url: "/dashboard/doctor/appointments",
+      },
+    ],
+  },
+  {
+    title: "Manage",
+    url: "#",
+    icon: Briefcase,
+    items: [
+      {
+        title: "Profile",
+        url: "/dashboard/doctor/profile", // Assuming we will create/use this
+      },
+      {
+        title: "Details",
+        url: "/dashboard/doctor/details",
+      },
+    ],
+  },
+]
 
 interface DashboardSidebar
-  extends React.HTMLAttributes<typeof SidebarProvider> {
-  user: Pick<User, "image" | "name" | "email">
+  extends React.ComponentProps<typeof Sidebar> {
+  user: Pick<User, "image" | "name" | "email"> & { role?: string }
 }
 
-export function DashboardSidebar({ ...props }: DashboardSidebar) {
+export function DashboardSidebar({ user, ...props }: DashboardSidebar) {
+  const navItems = user.role === "doctor" ? doctorNav : patientNav
+
   return (
-    <Sidebar variant="inset">
+    <Sidebar variant="inset" {...props}>
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
@@ -150,7 +183,7 @@ export function DashboardSidebar({ ...props }: DashboardSidebar) {
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-semibold">Veil</span>
-                  <span className="truncate text-xs">Enterprise</span>
+                  <span className="truncate text-xs">Healthcare</span>
                 </div>
               </a>
             </SidebarMenuButton>
@@ -161,7 +194,7 @@ export function DashboardSidebar({ ...props }: DashboardSidebar) {
         <SidebarGroup>
           <SidebarGroupLabel>Platform</SidebarGroupLabel>
           <SidebarMenu>
-            {data.navMain.map((item) => (
+            {navItems.map((item) => (
               <Collapsible key={item.title} asChild defaultOpen={item.isActive}>
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild tooltip={item.title}>
@@ -226,18 +259,18 @@ export function DashboardSidebar({ ...props }: DashboardSidebar) {
                 >
                   <Avatar className="size-8 rounded-lg border border-secondary">
                     <AvatarImage
-                      src={props.user.image || "/logo.png"}
-                      alt={props.user.name || "#"}
+                      src={user.image || "/logo.png"}
+                      alt={user.name || "#"}
                     />
                     <AvatarFallback className="rounded-lg">
-                      {props.user.name?.[0]}
+                      {user.name?.[0]}
                     </AvatarFallback>
                   </Avatar>
                   <div className="grid flex-1 text-left text-sm leading-tight">
                     <span className="truncate font-semibold">
-                      {props.user.name}
+                      {user.name}
                     </span>
-                    <span className="truncate text-xs">{props.user.email}</span>
+                    <span className="truncate text-xs">{user.email}</span>
                   </div>
                   <ChevronsUpDown className="ml-auto size-4" />
                 </SidebarMenuButton>
@@ -252,17 +285,17 @@ export function DashboardSidebar({ ...props }: DashboardSidebar) {
                   <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                     <Avatar className="size-8 rounded-lg">
                       <AvatarImage
-                        src={props.user.image || "/logo.png"}
-                        alt={props.user.name || ""}
+                        src={user.image || "/logo.png"}
+                        alt={user.name || ""}
                       />
                       <AvatarFallback className="rounded-lg">MB</AvatarFallback>
                     </Avatar>
                     <div className="grid flex-1 text-left text-sm leading-tight">
                       <span className="truncate font-semibold">
-                        {props.user.name}
+                        {user.name}
                       </span>
                       <span className="truncate text-xs">
-                        {props.user.email}
+                        {user.email}
                       </span>
                     </div>
                   </div>

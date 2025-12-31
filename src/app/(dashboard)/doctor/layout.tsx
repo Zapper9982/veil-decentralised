@@ -38,27 +38,33 @@ export default async function DashboardLayout({
   // Ensure only doctors can access doctor routes
   if (role !== "doctor") return redirect("/dashboard")
 
+  // Combine user data with role for the sidebar
+  const userWithRole = { ...user, role: "doctor" } as User & { role: string }
+
   return (
-    <div className="w-full bg-background">
-      <header className="flex h-16 items-center justify-between border-b p-4 pl-8 pr-12 lg:pl-36 lg:pr-24">
-        <div className="flex items-center gap-4">
-          <Icons.logo className="size-8" />
-          <MainNav items={dashboardConfig.mainNav} />
-        </div>
-        <div className="flex items-center gap-8">
-          <ModeToggle />
-          <UserAccountNav
-            user={{
-              name: user.name,
-              image: user.image,
-              email: user.email,
-            }}
-          />
-        </div>
-      </header>
-      <main className="relative min-h-screen overflow-hidden p-4">
-        {children}
-      </main>
-    </div>
+    <SidebarProvider>
+      <DashboardSidebar user={userWithRole} />
+      <div className="w-full bg-background">
+        <header className="flex h-16 items-center justify-between border-b p-4 pr-12 lg:pr-24">
+          <div className="flex items-center gap-4">
+            <SidebarTrigger />
+            <MainNav items={dashboardConfig.mainNav} />
+          </div>
+          <div className="flex items-center gap-8">
+            <ModeToggle />
+            <UserAccountNav
+              user={{
+                name: user.name,
+                image: user.image,
+                email: user.email,
+              }}
+            />
+          </div>
+        </header>
+        <main className="relative min-h-screen overflow-hidden p-4">
+          {children}
+        </main>
+      </div>
+    </SidebarProvider>
   )
 }

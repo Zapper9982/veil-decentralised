@@ -1,170 +1,121 @@
+import { db } from "@/lib/db"
+import { getCurrentUser } from "@/lib/session"
 import { AppointmentStatus } from "@prisma/client"
 import { z } from "zod"
 
-import { db } from "@/lib/db"
-import { getCurrentUser } from "@/lib/session"
+const routeContextSchema = z.object({
+    params: z.object({
+        id: z.string(),
+    }),
+})
 
-const patientConfirmationSchema = z.object({
-    action: z.enum(["accept", "reject"]),
+const confirmSchema = z.object({
+    action: z.enum(["confirm", "reject"]),
     message: z.string().optional(),
 })
 
-// PATCH /api/appointments/[id]/confirm
 export async function PATCH(
     req: Request,
     { params }: { params: { id: string } }
 ) {
     try {
-        const session = await getCurrentUser()
-        if (!session) {
+        const user = await getCurrentUser()
+
+        if (!user) {
             return new Response("Unauthorized", { status: 401 })
         }
 
-        // Get patient profile
+        // Verify user is a patient
         const patient = await db.patient.findFirst({
-            where: { userId: session.id },
+            where: { userId: user.id },
         })
 
         if (!patient) {
+            // Fallback for role mismatch
+            const userRecord = await db.user.findUnique({ where: { id: user.id } })
+            if (userRecord?.role === "doctor") {
+                return new Response("Unauthorized - User is not a patient", { status: 403 })
+            }
             return new Response("Patient profile not found", { status: 404 })
         }
 
-        // Parse request body
         const json = await req.json()
-        const { action, message } = patientConfirmationSchema.parse(json)
+        const { action, message } = confirmSchema.parse(json)
 
-        // Get appointment
+        // Verify appointment exists and belongs to patient
         const appointment = await db.appointment.findUnique({
-            where: { id: params.id },
-            include: {
-                doctor: {
-                    include: {
-                        user: {
-                            select: {
-                                name: true,
-                                email: true,
-                                image: true,
-                            },
-                        },
-                    },
-                },
+            where: {
+                id: params.id,
+                patientId: patient.id,
             },
+            include: {
+                doctor: true // Start fetching doctor to reveal location later
+            }
         })
 
         if (!appointment) {
             return new Response("Appointment not found", { status: 404 })
         }
 
-        // Verify this patient owns the appointment
-        if (appointment.patientId !== patient.id) {
-            return new Response("Not authorized for this appointment", { status: 403 })
-        }
-
-        // Verify appointment is in correct status
-        if (
-            appointment.status !== AppointmentStatus.PENDING_PATIENT_CONFIRMATION
-        ) {
-            return new Response(
-                `Cannot confirm appointment with status: ${appointment.status}`,
-                { status: 400 }
-            )
-        }
-
-        // Handle rejection - go back to doctor to propose new time
         if (action === "reject") {
-            const updated = await db.appointment.update({
+            await db.appointment.update({
                 where: { id: params.id },
                 data: {
-                    status: AppointmentStatus.PENDING_DOCTOR_RESPONSE,
-                    patientMessage: message || "Patient declined proposed time",
+                    status: AppointmentStatus.CANCELLED,
+                    patientMessage: message,
                     patientConfirmed: false,
-                    proposedTime: null, // Clear proposed time
-                },
-                include: {
-                    patient: {
-                        include: {
-                            user: {
-                                select: {
-                                    name: true,
-                                    email: true,
-                                },
-                            },
-                        },
-                    },
-                    doctor: {
-                        include: {
-                            user: {
-                                select: {
-                                    name: true,
-                                    email: true,
-                                    image: true,
-                                },
-                            },
-                        },
-                    },
                 },
             })
+
+            return Response.json({ status: "success", message: "Appointment rejected" })
+        }
+
+        if (action === "confirm") {
+            if (appointment.status !== AppointmentStatus.PENDING_PATIENT_CONFIRMATION) {
+                return new Response("Appointment is not in a confirmable state", { status: 400 })
+            }
+
+            const updatedAppointment = await db.appointment.update({
+                where: { id: params.id },
+                data: {
+                    status: AppointmentStatus.CONFIRMED,
+                    patientConfirmed: true,
+                    locationRevealed: true,
+                    patientMessage: message,
+                    confirmedTime: appointment.proposedTime || appointment.startTime
+                },
+            })
+
+            // Reveal Location Details (Mock Decryption)
+            // In a real app, strict access control and decryption would happen here
+            // For now, we assume the fields in the Doctor model are available (even if base64 encoded)
+
+            const clinicDetails = {
+                name: appointment.doctor.clinicName,
+                address: appointment.doctor.clinicAddress, // Should be decrypted
+                city: appointment.doctor.clinicCity,
+                state: appointment.doctor.clinicState,
+                pincode: appointment.doctor.clinicPincode,
+                phone: appointment.doctor.clinicPhone,
+            }
 
             return Response.json({
                 status: "success",
-                message: "Proposed time rejected. Doctor will be notified.",
-                data: updated,
+                data: {
+                    appointment: updatedAppointment,
+                    clinic: clinicDetails
+                }
             })
         }
 
-        // Handle acceptance - confirm appointment
-        const updated = await db.appointment.update({
-            where: { id: params.id },
-            data: {
-                confirmedTime: appointment.proposedTime,
-                patientMessage: message,
-                patientConfirmed: true,
-                status: AppointmentStatus.CONFIRMED,
-                locationRevealed: true, // Reveal doctor's location
-            },
-            include: {
-                patient: {
-                    include: {
-                        user: {
-                            select: {
-                                name: true,
-                                email: true,
-                            },
-                        },
-                    },
-                },
-                doctor: {
-                    include: {
-                        user: {
-                            select: {
-                                name: true,
-                                email: true,
-                                image: true,
-                            },
-                        },
-                    },
-                },
-            },
-        })
+        return new Response("Invalid action", { status: 400 })
 
-        return Response.json({
-            status: "success",
-            message: "Appointment confirmed! Check location details.",
-            data: updated,
-        })
     } catch (error) {
         if (error instanceof z.ZodError) {
-            return Response.json(
-                {
-                    status: "error",
-                    message: "Validation failed",
-                    errors: error.errors,
-                },
-                { status: 422 }
-            )
+            return new Response(JSON.stringify(error.issues), { status: 422 })
         }
 
         console.error("Error confirming appointment:", error)
-        return new Response("Internal Server Error", { status: 500 })
+        return new Response(null, { status: 500 })
     }
 }
