@@ -30,8 +30,9 @@ import { Toaster } from "@/components/ui/toaster"
 import { useToast } from "@/components/ui/use-toast"
 
 interface AppointmentFormData {
-  date: string
-  time: string
+  symptoms: string
+  preferredTimes: string[] // Array of datetime ISOs
+  urgencyLevel: "low" | "medium" | "high"
 }
 
 // API Functions
@@ -60,9 +61,11 @@ export default function AppointmentBookingPage() {
   const [symptoms, setSymptoms] = useState("")
   const [selectedDoctor, setSelectedDoctor] = useState<DoctorData | null>(null)
   const [formData, setFormData] = useState<AppointmentFormData>({
-    date: "",
-    time: "",
+    symptoms: "",
+    preferredTimes: [],
+    urgencyLevel: "medium",
   })
+  const [tempTime, setTempTime] = useState({ date: "", time: "" })
   const [isBookingDialogOpen, setIsBookingDialogOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isFetchingDoctors, setIsFetchingDoctors] = useState(true)
@@ -133,11 +136,65 @@ export default function AppointmentBookingPage() {
     }
   }
 
-  const handleBookAppointment = async () => {
-    if (!selectedDoctor || !formData.date || !formData.time) {
+  const handleAddPreferredTime = () => {
+    if (!tempTime.date || !tempTime.time) {
       toast({
         title: "Error",
-        description: "Please fill in all appointment details",
+        description: "Please select both date and time",
+        variant: "destructive",
+      })
+      return
+    }
+
+    const datetime = new Date(`${tempTime.date}T${tempTime.time}`)
+    const isoString = datetime.toISOString()
+
+    if (!formData.preferredTimes.includes(isoString)) {
+      setFormData(prev => ({
+        ...prev,
+        preferredTimes: [...prev.preferredTimes, isoString]
+      }))
+      setTempTime({ date: "", time: "" })
+    }
+  }
+
+  const handleRemovePreferredTime = (timeToRemove: string) => {
+    setFormData(prev => ({
+      ...prev,
+      preferredTimes: prev.preferredTimes.filter(t => t !== timeToRemove)
+    }))
+  }
+
+  const handleBookAppointment = async () => {
+    console.log("handleBookAppointment called")
+    console.log("selectedDoctor:", selectedDoctor)
+    console.log("formData:", formData)
+
+    if (!selectedDoctor) {
+      console.log("Validation failed: no doctor")
+      toast({
+        title: "Error",
+        description: "Please select a doctor",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (!formData.symptoms || formData.symptoms.length < 10) {
+      console.log("Validation failed: symptoms too short")
+      toast({
+        title: "Error",
+        description: "Please describe your symptoms (at least 10 characters)",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (formData.preferredTimes.length === 0) {
+      console.log("Validation failed: no preferred times")
+      toast({
+        title: "Error",
+        description: "Please add at least one preferred time slot",
         variant: "destructive",
       })
       return
@@ -145,34 +202,30 @@ export default function AppointmentBookingPage() {
 
     try {
       setIsLoading(true)
-      const startTime = new Date(`${formData.date}T${formData.time}`)
-      const endTime = new Date(startTime.getTime() + 30 * 60000)
+      console.log("Sending API request...")
 
       const response = await axios.post("/api/appointments", {
         doctorId: selectedDoctor.id,
-        startTime: startTime.toISOString(),
-        endTime: endTime.toISOString(),
+        symptoms: formData.symptoms,
+        preferredTimes: formData.preferredTimes,
+        urgencyLevel: formData.urgencyLevel,
       })
 
-      if (response.status !== 201) {
-        toast({
-          title: "Error",
-          description: "Failed to book appointment",
-          variant: "destructive",
-        })
-      }
+      console.log("API response:", response.data)
 
       toast({
         title: "Success",
-        description: "Appointment booked successfully!",
+        description: "Appointment request sent! Doctor will review and propose a time.",
       })
+
       setIsBookingDialogOpen(false)
-      setFormData({ date: "", time: "" })
-    } catch (error) {
-      console.log(error)
+      setFormData({ symptoms: "", preferredTimes: [], urgencyLevel: "medium" })
+      setSelectedDoctor(null)
+    } catch (error: any) {
+      console.error("API error:", error)
       toast({
         title: "Error",
-        description: error.message || "Failed to book appointment",
+        description: error.response?.data?.message || "Failed to book appointment",
         variant: "destructive",
       })
     } finally {
@@ -279,8 +332,9 @@ export default function AppointmentBookingPage() {
                   <Badge variant="outline">{doctor.specialty}</Badge>
                 </div>
                 <Button
-                  className="absolute bottom-5 right-5"
+                  className="mt-4 w-full"
                   onClick={() => {
+                    console.log("Book Appointment clicked for:", doctor)
                     setSelectedDoctor(doctor)
                     setIsBookingDialogOpen(true)
                   }}
@@ -299,54 +353,127 @@ export default function AppointmentBookingPage() {
 
       {/* Booking Dialog */}
       <Dialog open={isBookingDialogOpen} onOpenChange={setIsBookingDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Book Appointment</DialogTitle>
+            <DialogTitle>Book Appointment with {selectedDoctor?.name}</DialogTitle>
           </DialogHeader>
-          <div className="grid gap-4">
+          <div className="grid gap-6">
+            {/* Symptoms */}
             <div className="grid gap-2">
-              <Label>Selected Doctor</Label>
-              <Input
-                value={selectedDoctor?.name || ""}
-                disabled
-                className="bg-gray-50"
+              <Label>Describe Your Symptoms *</Label>
+              <Textarea
+                placeholder="Please describe your symptoms in detail (min. 10 characters)..."
+                value={formData.symptoms}
+                onChange={(e) => setFormData(prev => ({ ...prev, symptoms: e.target.value }))}
+                rows={4}
+                className="resize-none"
               />
+              <p className="text-xs text-muted-foreground">
+                {formData.symptoms.length}/10 characters minimum
+              </p>
             </div>
+
+            {/* Urgency Level */}
             <div className="grid gap-2">
-              <Label>Date</Label>
-              <Input
-                type="date"
-                name="date"
-                value={formData.date}
-                onChange={handleInputChange}
-                min={new Date().toISOString().split("T")[0]}
-                required
-              />
+              <Label>Urgency Level</Label>
+              <select
+                value={formData.urgencyLevel}
+                onChange={(e) => setFormData(prev => ({
+                  ...prev,
+                  urgencyLevel: e.target.value as "low" | "medium" | "high"
+                }))}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
+              >
+                <option value="low">Low - Routine checkup</option>
+                <option value="medium">Medium - Some concern</option>
+                <option value="high">High - Urgent attention needed</option>
+              </select>
             </div>
+
+            {/* Preferred Times */}
             <div className="grid gap-2">
-              <Label>Time</Label>
-              <Input
-                type="time"
-                name="time"
-                value={formData.time}
-                onChange={handleInputChange}
-                required
-              />
+              <Label>Preferred Time Slots *</Label>
+              <div className="flex gap-2">
+                <Input
+                  type="date"
+                  value={tempTime.date}
+                  onChange={(e) => {
+                    console.log("Date changed:", e.target.value)
+                    setTempTime(prev => ({ ...prev, date: e.target.value }))
+                  }}
+                  min={new Date().toISOString().split("T")[0]}
+                  className="flex-1"
+                />
+                <Input
+                  type="time"
+                  value={tempTime.time}
+                  onChange={(e) => {
+                    console.log("Time changed:", e.target.value)
+                    setTempTime(prev => ({ ...prev, time: e.target.value }))
+                  }}
+                  className="flex-1"
+                />
+                <Button onClick={() => {
+                  console.log("Add button clicked!")
+                  console.log("tempTime:", tempTime)
+                  handleAddPreferredTime()
+                }} variant="outline">
+                  Add
+                </Button>
+              </div>
+
+              {/* Display preferred times */}
+              {formData.preferredTimes.length > 0 && (
+                <div className="mt-2 space-y-2">
+                  <p className="text-sm font-medium">Your preferred times:</p>
+                  {formData.preferredTimes.map((time) => (
+                    <div
+                      key={time}
+                      className="flex items-center justify-between rounded-md border p-2"
+                    >
+                      <span className="text-sm">
+                        {new Date(time).toLocaleString()}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRemovePreferredTime(time)}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Add multiple time slots. Doctor will choose one that works.
+              </p>
             </div>
-            <Button
-              onClick={handleBookAppointment}
-              disabled={isLoading}
-              className="w-full"
-            >
-              {isLoading ? "Booking..." : "Confirm Booking"}
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => setIsBookingDialogOpen(false)}
-              className="w-full"
-            >
-              Cancel
-            </Button>
+
+            {/* Action Buttons */}
+            <div className="flex gap-2">
+              <Button
+                onClick={() => {
+                  console.log("Button clicked!")
+                  handleBookAppointment()
+                }}
+                disabled={isLoading}
+                className="flex-1"
+              >
+                {isLoading ? "Sending Request..." : "Send Appointment Request"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsBookingDialogOpen(false)
+                  setFormData({ symptoms: "", preferredTimes: [], urgencyLevel: "medium" })
+                  setTempTime({ date: "", time: "" })
+                }}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

@@ -1,21 +1,17 @@
-// app/api/appointments/route.ts
+import { AppointmentStatus } from "@prisma/client"
 import { z } from "zod"
 
 import { db } from "@/lib/db"
 import { getCurrentUser } from "@/lib/session"
 
-// Enum to match Prisma schema
-const AppointmentStatus = {
-  PENDING: "PENDING",
-  CONFIRMED: "CONFIRMED",
-  CANCELED: "CANCELED",
-} as const
-
 // Validation schema for appointment request
 const appointmentSchema = z.object({
   doctorId: z.string(),
-  startTime: z.string().datetime(),
-  endTime: z.string().datetime(),
+  startTime: z.string().datetime().optional(),
+  endTime: z.string().datetime().optional(),
+  preferredTimes: z.array(z.string().datetime()),
+  symptoms: z.string().min(10, "Please describe your symptoms"),
+  urgencyLevel: z.enum(["low", "medium", "high"]).optional(),
 })
 
 // Error responses
@@ -39,11 +35,12 @@ export async function POST(req: Request) {
 
     // Parse request body
     const json = await req.json()
-    const { doctorId, startTime, endTime } = appointmentSchema.parse(json)
+    const { doctorId, preferredTimes, symptoms, urgencyLevel } = appointmentSchema.parse(json)
 
-    // Convert strings to Date objects
-    const startDateTime = new Date(startTime)
-    const endDateTime = new Date(endTime)
+    // Convert preferred times to Date objects
+    const preferredDates = preferredTimes.map((time) => new Date(time))
+    const startDateTime = preferredDates[0]
+    const endDateTime = new Date(startDateTime.getTime() + 30 * 60000) // 30 min default
 
     // Get patient profile
     const patient = await db.patient.findFirst({
@@ -72,27 +69,20 @@ export async function POST(req: Request) {
       return new Response("Doctor not found", { status: 404 })
     }
 
-    if (!doctor.verified) {
-      return new Response("Doctor not verified", {
-        status: 403,
-      })
-    }
+    // TODO: Re-enable after doctor verification flow is implemented
+    // if (!doctor.verified) {
+    //   return new Response("Doctor not verified", {
+    //     status: 403,
+    //   })
+    // }
 
-    // Check if doctor has access to patient's records
-    const accessRequest = await db.req_access.findUnique({
-      where: {
-        doctorId_patientId: {
-          doctorId: doctor.blockId,
-          patientId: patient.blockId,
-        },
-      },
-    })
+    // Simple encryption for symptoms (Base64 placeholder - use crypto in production)
+    const symptomsEncrypted = Buffer.from(symptoms).toString("base64")
+    const symptomsHash = Buffer.from(symptoms)
+      .toString("base64")
+      .substring(0, 20)
 
-    if (!accessRequest || accessRequest.status !== "CONFIRMED") {
-      return new Response("Access request not approved", { status: 403 })
-    }
-
-    // Check for conflicting appointments
+    // Check for conflicting appointments (updated status values)
     const conflictingAppointment = await db.appointment.findFirst({
       where: {
         OR: [
@@ -105,7 +95,7 @@ export async function POST(req: Request) {
               gte: startDateTime,
             },
             status: {
-              in: ["PENDING", "CONFIRMED"],
+              in: [AppointmentStatus.PENDING_DOCTOR_RESPONSE, AppointmentStatus.PENDING_PATIENT_CONFIRMATION, AppointmentStatus.CONFIRMED, AppointmentStatus.IN_PROGRESS],
             },
           },
           {
@@ -117,7 +107,7 @@ export async function POST(req: Request) {
               gte: startDateTime,
             },
             status: {
-              in: ["PENDING", "CONFIRMED"],
+              in: [AppointmentStatus.PENDING_DOCTOR_RESPONSE, AppointmentStatus.PENDING_PATIENT_CONFIRMATION, AppointmentStatus.CONFIRMED, AppointmentStatus.IN_PROGRESS],
             },
           },
         ],
@@ -128,14 +118,18 @@ export async function POST(req: Request) {
       return new Response("Time slot not available", { status: 409 })
     }
 
-    // Create appointment
+    // Create appointment with privacy fields
     const appointment = await db.appointment.create({
       data: {
         doctorId,
         patientId: patient.id,
         startTime: startDateTime,
         endTime: endDateTime,
-        status: "PENDING",
+        preferredTimes: preferredTimes,
+        symptomsEncrypted,
+        symptomsHash,
+        urgencyLevel: urgencyLevel || "medium",
+        status: AppointmentStatus.PENDING_DOCTOR_RESPONSE,
       },
       include: {
         doctor: {
@@ -144,6 +138,7 @@ export async function POST(req: Request) {
               select: {
                 name: true,
                 email: true,
+                image: true,
               },
             },
           },

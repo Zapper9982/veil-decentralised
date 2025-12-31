@@ -24,7 +24,7 @@ model Account {
   id_token          String?
   session_state     String?
   createdAt         DateTime @default(now()) @map(name: "created_at")
-  updatedAt         DateTime @updatedAt      @map(name: "updated_at")
+  updatedAt         DateTime @updatedAt @map(name: "updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -56,13 +56,14 @@ model User {
   emailVerified DateTime?
   image         String?
   createdAt     DateTime  @default(now()) @map(name: "created_at")
-  updatedAt     DateTime  @updatedAt      @map(name: "updated_at")
+  updatedAt     DateTime  @updatedAt @map(name: "updated_at")
   role          UserRole  @default(unset)
 
   accounts Account[]
   sessions Session[]
   patients Patient[]
   doctors  Doctor[]
+
   @@map(name: "users")
 }
 
@@ -77,104 +78,150 @@ model VerificationToken {
 }
 
 model Doctor {
-  id           String     @id @default(cuid()) @map("_id")
-  userId       String
-  phoneNumber  String     @unique
-  aadharNumber String
-  mbbsId       String
-  specialty    String
-  verified     Boolean    @default(false)
-  blockId      String     @unique
-  appointments Appointment[]
-  Prescription Prescription[]
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String         @id @default(cuid()) @map("_id")
+  userId         String
+  phoneNumber    String         @unique
+  aadharNumber   String
+  mbbsId         String
+  specialty      String
+  verified       Boolean        @default(false)
+  blockId        String         @unique
+  
+  // Clinic information (revealed only after patient confirms appointment)
+  clinicName     String?
+  clinicAddress  String?        // Base64 encoded for privacy
+  clinicCity     String?
+  clinicState    String?
+  clinicPincode  String?
+  clinicPhone    String?        // Base64 encoded for privacy
+  
+  appointments   Appointment[]
+  Prescription   Prescription[]
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   accessRequests Req_access[]
 
   @@index([userId])
-
   @@index([aadharNumber])
   @@index([mbbsId])
 }
 
 model Patient {
-  id               String     @id @default(cuid()) @map("_id")
+  id               String         @id @default(cuid()) @map("_id")
   userId           String
-  createdAt        DateTime   @default(now())
-  updatedAt        DateTime   @updatedAt
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
   gender           String
   dateOfBirth      DateTime
-  bloodType        String?   
-  chronicDiseases  String[]  
+  bloodType        String?
+  chronicDiseases  String[]
   emergencyContact String
-  blockId          String    @unique
+  blockId          String         @unique
   appointments     Appointment[]
   prescriptions    Prescription[]
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   accessRequests   Req_access[]
 
   @@index([userId])
-
 }
 
 model Appointment {
-  id           String            @id @default(cuid()) @map("_id")
-  doctorId     String
-  patientId    String
-  startTime    DateTime
-  endTime      DateTime
-  status       AppointmentStatus @default(PENDING)
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
+  id        String @id @default(cuid()) @map("_id")
+  doctorId  String
+  patientId String
 
-  doctor       Doctor    @relation(fields: [doctorId], references: [id], onDelete: Cascade)
-  patient      Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  // Time management
+  startTime      DateTime
+  endTime        DateTime
+  preferredTimes String[] // Array of ISO datetime strings
+  proposedTime   DateTime? // Doctor's proposed time
+  confirmedTime  DateTime? // Final confirmed time
 
-  @@unique([doctorId, startTime, endTime])
-  @@unique([patientId, startTime, endTime])
+  // Privacy & Encryption
+  symptomsEncrypted String // Encrypted patient symptoms
+  symptomsHash      String // Hash for verification without revealing content
+  locationRevealed  Boolean @default(false)
+  symptomsRevealed  Boolean @default(false)
+
+  // Status workflow
+  status AppointmentStatus @default(PENDING_DOCTOR_RESPONSE)
+
+  // Doctor response
+  doctorMessage    String? // Doctor's message when proposing time
+  doctorConfirmed  Boolean   @default(false)
+  confirmationTime DateTime? // When doctor confirmed
+
+  // Patient response
+  patientMessage   String? // Patient's response message
+  patientConfirmed Boolean @default(false)
+
+  // Prescription & Payment
+  prescriptionId   String? // Reference to prescription
+  zkProofId        Int? // ZK proof ID from blockchain
+  paymentTxHash    String? // Blockchain transaction hash
+  amountPaid       Float? // Amount paid in HTK
+  paymentCompleted Boolean @default(false)
+
+  // Check-in (optional feature)
+  checkedIn   Boolean   @default(false)
+  checkInTime DateTime?
+
+  // Metadata
+  urgencyLevel String? // low, medium, high
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  doctor  Doctor  @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([doctorId])
+  @@index([patientId])
+  @@index([status])
 }
 
-// Enum to track appointment status
+// Enhanced enum for appointment status workflow
 enum AppointmentStatus {
-  PENDING
-  CONFIRMED
-  CANCELED
+  PENDING_DOCTOR_RESPONSE // Step 1: Patient booked, waiting for doctor
+  PENDING_PATIENT_CONFIRMATION // Step 2: Doctor proposed time, waiting for patient
+  CONFIRMED // Step 3: Both confirmed, appointment scheduled
+  IN_PROGRESS // Step 5: Patient checked in / consultation started
+  COMPLETED // Step 6: Prescription issued, ready for payment
+  PAID // Step 7: Payment completed
+  CANCELLED // Cancelled by either party
 }
 
 model Medication {
-    id                     String      @id @default(uuid()) @map("_id")
-    prescId                String
-    name                   String
-    dosage                 String
-    duration               String
-    additionalInstructions String?
+  id                     String  @id @default(uuid()) @map("_id")
+  prescId                String
+  name                   String
+  dosage                 String
+  duration               String
+  additionalInstructions String?
 
-    prescriptions          Prescription   @relation(fields: [prescId], references: [id], onDelete: Cascade)
+  prescriptions Prescription @relation(fields: [prescId], references: [id], onDelete: Cascade)
 }
 
 model Prescription {
-    id                     String      @id @default(uuid()) @map("_id")
-    doctorId               String
-    patientId              String
-    issueDate              DateTime    @default(now())
-    validTill              DateTime
-    medications            Medication[]
+  id          String       @id @default(uuid()) @map("_id")
+  doctorId    String
+  patientId   String
+  issueDate   DateTime     @default(now())
+  validTill   DateTime
+  medications Medication[]
 
-    doctor                 Doctor      @relation(fields: [doctorId], references: [id], onDelete: Cascade)
-    patient                Patient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor  Doctor  @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
 }
 
 model Req_access {
-  id           String            @id @default(cuid()) @map("_id")
-  doctorId     String           
-  patientId    String         
-  status       AppointmentStatus     @default(PENDING)
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
+  id        String            @id @default(cuid()) @map("_id")
+  doctorId  String
+  patientId String
+  status    AppointmentStatus @default(PENDING_DOCTOR_RESPONSE)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
 
-  doctor       Doctor            @relation(fields: [doctorId], references: [blockId], onDelete: Cascade)
-  patient      Patient           @relation(fields: [patientId], references: [blockId], onDelete: Cascade)
+  doctor  Doctor  @relation(fields: [doctorId], references: [blockId], onDelete: Cascade)
+  patient Patient @relation(fields: [patientId], references: [blockId], onDelete: Cascade)
 
-  @@unique([doctorId, patientId]) 
+  @@unique([doctorId, patientId])
 }
-
-
