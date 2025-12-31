@@ -90,11 +90,11 @@ const data = {
         },
         {
           title: "Your Appointments",
-          url: "/dashboard/appointments",
+          url: "/dashboard/patient/appointments",
         },
         {
           title: "Book appointments",
-          url: "/dashboard/appointments/book",
+          url: "/dashboard/patient/appointments/book",
         },
       ],
     },

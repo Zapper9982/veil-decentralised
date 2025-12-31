@@ -5,8 +5,6 @@ import { DoctorData } from "@/types"
 import axios from "axios"
 import { format } from "date-fns"
 import { Search } from "lucide-react"
-
-import { sampleDoctors } from "@/lib/demidata"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -47,8 +45,8 @@ const getDoctorRecommendation = async (symptoms: string): Promise<string> => {
 
     if (!response.ok) throw new Error("Failed to get recommendation")
 
-    const data = await response.json()
-    return data?.doctors[0] ?? "Neurosurgeon"
+    const data = await response.json() as { doctors?: string[] }
+    return data?.doctors?.[0] ?? "Neurosurgeon"
   } catch (error) {
     console.error("Recommendation error:", error)
     throw error
@@ -57,7 +55,7 @@ const getDoctorRecommendation = async (symptoms: string): Promise<string> => {
 
 export default function AppointmentBookingPage() {
   // State
-  const [doctors, setDoctors] = useState<DoctorData[]>(sampleDoctors)
+  const [doctors, setDoctors] = useState<DoctorData[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [symptoms, setSymptoms] = useState("")
   const [selectedDoctor, setSelectedDoctor] = useState<DoctorData | null>(null)
@@ -81,7 +79,7 @@ export default function AppointmentBookingPage() {
     try {
       setIsFetchingDoctors(true)
       const response = await axios.get("/api/doctors")
-      setDoctors([...doctors, ...response.data])
+      setDoctors(response.data)
     } catch (error) {
       toast({
         title: "Error",
