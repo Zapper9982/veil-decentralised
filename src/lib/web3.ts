@@ -9,6 +9,13 @@ const MEDICAL_ZK_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_MEDICAL_ZK_CONTRACT_
 const ZK_VERIFIER_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_ZK_VERIFIER_CONTRACT_ADDRESS!;
 const HEALTHTOKEN_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_HEALTHTOKEN_CONTRACT_ADDRESS!;
 
+console.log("DEBUG: Web3 Env Vars:", {
+  MEDICAL: MEDICAL_CONTRACT_ADDRESS,
+  MEDICAL_ZK: MEDICAL_ZK_CONTRACT_ADDRESS,
+  VERIFIER: ZK_VERIFIER_CONTRACT_ADDRESS,
+  TOKEN: HEALTHTOKEN_CONTRACT_ADDRESS
+})
+
 export const getProvider = () => {
   if (typeof window !== "undefined" && window.ethereum) {
     return new ethers.BrowserProvider(window.ethereum);
@@ -50,8 +57,8 @@ export const getZKVerifierContract = async () => {
 };
 
 export const getHealthTokenContract = async () => {
-    const signer = await getSigner();
-    const provider = getProvider();
-    const contractProvider = signer || provider;
-    return new ethers.Contract(HEALTHTOKEN_CONTRACT_ADDRESS, HealthTokenContract.abi, contractProvider);
+  const signer = await getSigner();
+  const provider = getProvider();
+  const contractProvider = signer || provider;
+  return new ethers.Contract(HEALTHTOKEN_CONTRACT_ADDRESS, HealthTokenContract.abi, contractProvider);
 };

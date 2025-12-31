@@ -62,6 +62,7 @@ export default async function Appointments() {
       doctor: {
         select: {
           mbbsId: true,
+          blockId: true,
           clinicName: true,
           clinicAddress: true,
           user: {
@@ -76,6 +77,10 @@ export default async function Appointments() {
       updatedAt: 'desc'
     }
   })
+
+  console.log("DEBUG: User ID:", user.id)
+  console.log("DEBUG: Fetched Appointments Count:", appointments.length)
+  appointments.forEach(app => console.log(`DEBUG: Appt ${app.id} Status: ${app.status}`))
 
   const upcomingAppointments = appointments.filter(
     (appointment) => new Date(appointment.startTime) >= new Date()

@@ -54,11 +54,44 @@ export const AppointmentCard = ({ appointment, isPast = false }) => {
       const data = (await res.json()) as { data: { clinic: ClinicDetails } }
 
       if (action === "confirm") {
+        try {
+          // Blockchain integration
+          const { getMedicalWithZKContract } = await import("@/lib/web3")
+          const contract = await getMedicalWithZKContract()
+
+          if (appointment.proposedTime && appointment.doctor?.blockId) {
+            const timeInSeconds = Math.floor(new Date(appointment.proposedTime).getTime() / 1000)
+
+            // Initial user feedback
+            alert("Please confirm the transaction in your wallet to record this appointment on the blockchain.")
+
+            console.log("DEBUG: Calling createAppointment with:", {
+              doctorAddress: appointment.doctor.blockId,
+              time: timeInSeconds
+            })
+
+            const tx = await contract.createAppointment(
+              appointment.doctor.blockId,
+              timeInSeconds
+            )
+            console.log("Transaction sent:", tx.hash)
+            await tx.wait()
+            console.log("Appointment recorded on blockchain:", tx.hash)
+          }
+        } catch (bcError: any) {
+          console.error("Blockchain error details:", bcError)
+          if (bcError.reason) console.error("Revert reason:", bcError.reason)
+          if (bcError.message) console.error("Error message:", bcError.message)
+
+          alert(`Blockchain recording failed: ${bcError.reason || bcError.message || "Unknown error"}. Check console for details.`)
+          // We proceed anyway to show the UI update since backend succeeded
+        }
+
         setStatus("CONFIRMED")
         const clinic = data.data.clinic
         setClinicDetails(clinic)
         setShowLocation(true)
-        alert(`Appointment Confirmed! Clinic: ${clinic.name}, ${clinic.address}`) // Simple feedback for now
+        alert(`Appointment Confirmed! Clinic: ${clinic.name}, ${clinic.address}`)
       } else {
         setStatus("CANCELLED")
       }
