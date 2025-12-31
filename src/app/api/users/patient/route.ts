@@ -28,7 +28,7 @@ export async function GET() {
     }
 
     const { user } = session
-    const doctors = await db.patient.findMany({
+    const patients = await db.patient.findMany({
       select: {
         id: true,
         userId: true,
@@ -37,13 +37,29 @@ export async function GET() {
         dateOfBirth: true,
         gender: true,
         emergencyContact: true,
+        chronicDiseases: true,
+        user: {
+          select: {
+            name: true,
+            email: true,
+            image: true, // Google OAuth image
+          },
+        },
       },
       where: {
         userId: user.id,
       },
     })
 
-    return new Response(JSON.stringify(doctors))
+    // Flatten the response to include user data at the top level
+    const formattedPatients = patients.map((patient) => ({
+      ...patient,
+      name: patient.user.name,
+      email: patient.user.email,
+      image: patient.user.image,
+    }))
+
+    return new Response(JSON.stringify(formattedPatients))
   } catch (error) {
     return new Response(null, { status: 500 })
   }

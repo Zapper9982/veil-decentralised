@@ -24,7 +24,7 @@ export default async function Component() {
     if (userWithRole.role === "doctor") {
       return redirect("/doctor")
     } else if (userWithRole.role === "patient") {
-      return redirect("/dashboard")
+      return redirect("/dashboard/patient/profile")
     }
   }
 

@@ -22,6 +22,10 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
+    async signIn({ user, account, profile }) {
+      // Allow sign in to complete
+      return true
+    },
     async session({ token, session }) {
       if (token) {
         session.user.id = token.id
@@ -52,6 +56,18 @@ export const authOptions: NextAuthOptions = {
         email: dbUser.email,
         picture: dbUser.image,
       }
+    },
+    async redirect({ url, baseUrl }) {
+      // After successful OAuth sign in, always redirect to our handler
+      // This handler will check if user is registered and route accordingly
+
+      // If the URL is already pointing to post-login-redirect, allow it
+      if (url.includes('/post-login-redirect')) {
+        return url
+      }
+
+      // For all other cases after OAuth, redirect to our handler
+      return `${baseUrl}/post-login-redirect`
     },
   },
 }

@@ -1,6 +1,7 @@
 import { getToken } from "next-auth/jwt"
 import { withAuth } from "next-auth/middleware"
 import { NextResponse } from "next/server"
+import { getUserRegistrationStatus } from "@/lib/userStatus"
 
 export default withAuth(
   async function middleware(req) {
@@ -10,12 +11,20 @@ export default withAuth(
       req.nextUrl.pathname.startsWith("/login") ||
       req.nextUrl.pathname.startsWith("/register")
 
+
     if (isAuthPage) {
       if (isAuth) {
-        return NextResponse.redirect(new URL("/dashboard", req.url))
+        // Check registration status
+        const userId = token?.sub;
+        if (userId) {
+          const regStatus = await getUserRegistrationStatus(userId);
+          if (!regStatus) {
+            return NextResponse.redirect(new URL("/verification", req.url));
+          }
+        }
+        return NextResponse.redirect(new URL("/dashboard", req.url));
       }
-
-      return null
+      return null;
     }
 
     if (!isAuth) {

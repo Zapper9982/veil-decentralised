@@ -102,7 +102,7 @@ export function PatientForm({ ...props }: PatientFormProps) {
           variant: "destructive",
         })
 
-      router.push("/dashboard")
+      router.push("/dashboard/patient/profile")
     } catch (error) {
       console.log(error)
     }
