@@ -89,7 +89,7 @@ export function DoctorForm({ ...props }: DoctorFormProps) {
           variant: "destructive",
         })
 
-      router.push("/dashboard")
+      router.push("/dashboard/doctor")
     } catch (error) {
       console.log(error)
     }

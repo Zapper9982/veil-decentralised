@@ -32,13 +32,28 @@ export async function GET() {
         verified: true,
         userId: true,
         blockId: true,
+        user: {
+          select: {
+            name: true,
+            email: true,
+            image: true, // Google OAuth image
+          },
+        },
       },
       where: {
         userId: user.id,
       },
     })
 
-    return new Response(JSON.stringify(doctors))
+    // Flatten the response to include user data at the top level
+    const formattedDoctors = doctors.map((doctor) => ({
+      ...doctor,
+      name: doctor.user.name,
+      email: doctor.user.email,
+      image: doctor.user.image,
+    }))
+
+    return new Response(JSON.stringify(formattedDoctors))
   } catch (error) {
     return new Response(null, { status: 500 })
   }
@@ -77,7 +92,7 @@ export async function POST(req: Request) {
         id: body.userId,
       },
       data: {
-        role: "patient",
+        role: "doctor",
       },
     })
 

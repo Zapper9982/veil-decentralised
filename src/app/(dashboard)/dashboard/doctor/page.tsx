@@ -41,45 +41,7 @@ import { getHealthTokenContract, getSigner } from "@/lib/web3"
 import { ethers } from "ethers"
 import { useToast } from "@/components/ui/use-toast"
 
-// Mock doctor data (replace with actual data fetching logic)
-const doctorData = {
-  id: 1,
-  userId: "user123",
-  name: "Om Thorat",
-  email: "thoratom1104@gmail.com",
-  image: "/logo.svg",
-  gender: "Male",
-  dateOfBirth: new Date("2004-10-26"),
-  bloodType: "O+",
-  chronicDiseases: ["Hypertension", "Diabetes"],
-  emergencyContact: "+1 (555) 123-4567",
-  blockId: "0x12345678901234567890",
-  balance: 500,
-}
-
-// Mock connected doctors data
-const connectedDoctors = [
-  {
-    id: 1,
-    name: "Dr. Jane Smith",
-    specialty: "Cardiologist",
-    image: "/placeholder.svg?height=50&width=50",
-  },
-  {
-    id: 2,
-    name: "Dr. Mike Johnson",
-    specialty: "Endocrinologist",
-    image: "/placeholder.svg?height=50&width=50",
-  },
-  {
-    id: 3,
-    name: "Dr. Sarah Lee",
-    specialty: "General Practitioner",
-    image: "/placeholder.svg?height=50&width=50",
-  },
-]
-
-// doctor benefits data
+// Doctor benefits data
 const doctorBenefits = [
   {
     icon: <Heart className="size-6 text-red-500" />,
@@ -100,16 +62,60 @@ const doctorBenefits = [
 ]
 
 export default function DoctorProfile() {
+  const [doctorData, setDoctorData] = useState<any>(null)
   const [appointments, setAppointments] = useState<any[]>([])
   const [prescriptions, setPrescriptions] = useState<any[]>([])
   const [balance, setBalance] = useState(100)
   const [topUpAmount, setTopUpAmount] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
   const [walletConnected, setWalletConnected] = useState(false)
   const [currentNetwork, setCurrentNetwork] = useState("")
   const { toast } = useToast()
 
   useEffect(() => {
+    // Fetch doctor data from database
+    const fetchDoctorData = async () => {
+      try {
+        setIsLoading(true)
+        const res = await fetch("/api/users/doctor")
+        if (!res.ok) {
+          setDoctorData(null)
+          setIsLoading(false)
+          return
+        }
+        const data = await res.json()
+        if (Array.isArray(data) && data.length > 0) {
+          const doctor = data[0] as any
+          setDoctorData({
+            id: doctor.id,
+            userId: doctor.userId,
+            name: doctor.name || "",
+            email: doctor.email || "",
+            image: doctor.image || "/logo.svg",
+            phoneNumber: doctor.phoneNumber || "N/A",
+            specialty: doctor.specialty || "N/A",
+            mbbsId: doctor.mbbsId || "N/A",
+            aadharNumber: doctor.aadharNumber || "N/A",
+            verified: doctor.verified || false,
+            blockId: doctor.blockId || "",
+          })
+        } else {
+          setDoctorData(null)
+        }
+      } catch (error) {
+        console.error("Failed to fetch doctor data:", error)
+        toast({
+          title: "Error",
+          description: "Failed to fetch doctor data from backend.",
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchDoctorData()
+
     // Fetch appointments and prescriptions
     // This is a mock implementation. Replace with actual API calls.
     setAppointments([
@@ -132,7 +138,7 @@ export default function DoctorProfile() {
         validTill: new Date("2023-06-15"),
       },
     ])
-    
+
     // Fetch actual HTK balance from blockchain
     fetchBalance()
   }, [])
@@ -142,33 +148,33 @@ export default function DoctorProfile() {
       console.log("🔍 Fetching balance...")
       const signer = await getSigner()
       console.log("👤 Signer for balance:", signer ? "✅ Connected" : "❌ Not connected")
-      
+
       if (!signer) {
         console.log("❌ No signer available")
         setWalletConnected(false)
         return
       }
-      
+
       setWalletConnected(true)
-      
+
       // Check network
       const network = await signer.provider?.getNetwork()
       console.log("🌐 Current network:", network)
       setCurrentNetwork(network ? `${network.name} (${network.chainId})` : "Unknown")
-      
+
       const address = await signer.getAddress()
       console.log("🏠 User address:", address)
-      
+
       const healthTokenContract = await getHealthTokenContract()
       console.log("🏥 Health token contract for balance:", healthTokenContract ? "✅ Loaded" : "❌ Failed")
-      
+
       const balance = await healthTokenContract.balanceOf(address)
       console.log("💰 Raw balance:", balance.toString())
-      
+
       // Convert from wei to tokens (assuming 18 decimals for ERC20)
       const balanceInTokens = ethers.formatEther(balance)
       console.log("💎 Balance in tokens:", balanceInTokens)
-      
+
       setBalance(parseFloat(balanceInTokens))
     } catch (error) {
       console.error("❌ Error fetching balance:", error)
@@ -178,17 +184,17 @@ export default function DoctorProfile() {
 
   const handleTopUp = async () => {
     console.log("🔥 Top-up button clicked!")
-    
+
     const amount = parseFloat(topUpAmount)
     console.log("💰 Amount entered:", amount)
-    
+
     if (!isNaN(amount) && amount > 0) {
       setIsLoading(true)
       try {
         console.log("🔍 Getting signer...")
         const signer = await getSigner()
         console.log("👤 Signer:", signer ? "✅ Connected" : "❌ Not connected")
-        
+
         if (!signer) {
           toast({
             title: "Wallet Not Connected",
@@ -202,36 +208,36 @@ export default function DoctorProfile() {
         console.log("🏥 Getting health token contract...")
         const healthTokenContract = await getHealthTokenContract()
         console.log("📋 Health token contract:", healthTokenContract ? "✅ Loaded" : "❌ Failed")
-        
+
         // Convert ETH amount to wei
         const valueInWei = ethers.parseEther(amount.toString())
         console.log("💎 Value in wei:", valueInWei.toString())
-        
+
         // Call buyTokens function with ETH payment
         console.log("🚀 Calling buyTokens with", amount, "ETH...")
         const tx = await healthTokenContract.buyTokens({ value: valueInWei })
         console.log("📄 Transaction hash:", tx.hash)
-        
+
         toast({
           title: "Transaction Submitted",
           description: `Transaction hash: ${tx.hash.slice(0, 10)}...`,
         })
-        
+
         // Wait for transaction confirmation
         console.log("⏳ Waiting for transaction confirmation...")
         const receipt = await tx.wait()
         console.log("✅ Transaction confirmed! Block number:", receipt.blockNumber)
-        
+
         toast({
           title: "Tokens Purchased Successfully",
           description: `You have purchased ${amount * 100} HTK tokens for ${amount} ETH`,
         })
-        
+
         // Refresh balance after purchase
         console.log("🔄 Refreshing balance...")
         await fetchBalance()
         setTopUpAmount("")
-        
+
       } catch (error: any) {
         console.error("❌ Error buying tokens:", error)
         console.error("Error details:", {
@@ -240,7 +246,7 @@ export default function DoctorProfile() {
           reason: error.reason,
           stack: error.stack
         })
-        
+
         let errorMessage = "Failed to purchase tokens"
         if (error.code === 4001) {
           errorMessage = "Transaction was rejected by user"
@@ -249,7 +255,7 @@ export default function DoctorProfile() {
         } else if (error.reason) {
           errorMessage = error.reason
         }
-        
+
         toast({
           title: "Transaction Failed",
           description: errorMessage,
@@ -270,173 +276,118 @@ export default function DoctorProfile() {
   return (
     <DashboardShell>
       <DashboardHeader
-        heading="doctor Profile"
+        heading="Doctor Profile"
         text="See all things related to you"
       />
 
-      <div className={`min-h-screen`}>
-        <div className="container mx-auto space-y-6 bg-background p-6 text-foreground transition-colors duration-300">
-          <div>
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-            >
-              <Card className="relative flex justify-between">
-                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-                  <Icons.logo className="size-2/3 opacity-20 duration-300 hover:animate-pulse" />
-                </div>
-                <div>
-                  <CardHeader className="flex flex-row items-center space-x-4">
-                    <motion.div
-                      whileHover={{ scale: 1.1 }}
-                      whileTap={{ scale: 0.9 }}
-                    >
-                      <Avatar className="size-20">
-                        <AvatarImage
-                          src={doctorData?.image}
-                          alt={doctorData?.name}
-                        />
-                        <AvatarFallback>
-                          {doctorData?.name.charAt(0)}
-                        </AvatarFallback>
-                      </Avatar>
-                    </motion.div>
-                    <div>
-                      <CardTitle className="text-2xl">
-                        {doctorData?.name}
-                      </CardTitle>
-                      <CardDescription>
-                        doctor ID: {doctorData?.id}
-                      </CardDescription>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="grid gap-4">
-                    <InfoItem
-                      icon={
-                        <User className="text-blue-500 dark:text-blue-400" />
-                      }
-                      label="Gender"
-                      value={doctorData?.gender}
-                    />
-                    <InfoItem
-                      icon={
-                        <Mail className="text-green-500 dark:text-green-400" />
-                      }
-                      label="Email"
-                      value={doctorData?.email}
-                    />
-                    <InfoItem
-                      icon={
-                        <Droplet className="text-red-500 dark:text-red-400" />
-                      }
-                      label="Blood Type"
-                      value={doctorData?.bloodType}
-                    />
-                    <InfoItem
-                      icon={
-                        <Phone className="text-yellow-500 dark:text-yellow-400" />
-                      }
-                      label="Emergency Contact"
-                      value={doctorData?.emergencyContact}
-                    />
-                    <div>
-                      <h3 className="mb-2 text-lg font-semibold">
-                        Chronic Diseases
-                      </h3>
-                      <div className="flex flex-wrap gap-2">
-                        {doctorData?.chronicDiseases.map((disease, index) => (
-                          <motion.div
-                            key={index}
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                          >
-                            <Badge
-                              variant="secondary"
-                              className="bg-orange-200 text-orange-800 dark:bg-orange-900 dark:text-orange-100"
-                            >
-                              {disease}
-                            </Badge>
-                          </motion.div>
-                        ))}
+      {isLoading ? (
+        <div className="flex justify-center items-center h-64">
+          <div className="text-lg">Loading doctor profile...</div>
+        </div>
+      ) : !doctorData ? (
+        <div className="flex justify-center items-center h-64">
+          <div className="text-lg">No doctor profile found. Please register as a doctor.</div>
+        </div>
+      ) : (
+        <div className={`min-h-screen`}>
+          <div className="container mx-auto space-y-6 bg-background p-6 text-foreground transition-colors duration-300">
+            <div>
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
+              >
+                <Card className="relative flex justify-between">
+                  <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+                    <Icons.logo className="size-2/3 opacity-20 duration-300 hover:animate-pulse" />
+                  </div>
+                  <div>
+                    <CardHeader className="flex flex-row items-center space-x-4">
+                      <motion.div
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.9 }}
+                      >
+                        <Avatar className="size-20">
+                          <AvatarImage
+                            src={doctorData?.image}
+                            alt={doctorData?.name}
+                          />
+                          <AvatarFallback>
+                            {doctorData?.name.charAt(0)}
+                          </AvatarFallback>
+                        </Avatar>
+                      </motion.div>
+                      <div>
+                        <CardTitle className="text-2xl">
+                          {doctorData?.name}
+                        </CardTitle>
+                        <CardDescription>
+                          {doctorData?.specialty}
+                        </CardDescription>
+                        {doctorData?.verified && (
+                          <Badge className="mt-2 bg-green-500">Verified</Badge>
+                        )}
                       </div>
-                    </div>
-                  </CardContent>
-                </div>
-                <Image
-                  src="/illustrations/doctor-1.svg"
-                  alt="Health Journey Visualization"
-                  width={400}
-                  height={300}
-                  className="hidden rounded-lg shadow-lg lg:block"
-                />
-              </Card>
-            </motion.div>
-          </div>
+                    </CardHeader>
+                    <CardContent className="grid gap-4">
+                      <InfoItem
+                        icon={
+                          <Mail className="text-green-500 dark:text-green-400" />
+                        }
+                        label="Email"
+                        value={doctorData?.email}
+                      />
+                      <InfoItem
+                        icon={
+                          <Phone className="text-yellow-500 dark:text-yellow-400" />
+                        }
+                        label="Phone"
+                        value={doctorData?.phoneNumber}
+                      />
+                      <InfoItem
+                        icon={
+                          <FileText className="text-blue-500 dark:text-blue-400" />
+                        }
+                        label="MBBS ID"
+                        value={doctorData?.mbbsId}
+                      />
+                    </CardContent>
+                  </div>
+                  <Image
+                    src="/illustrations/doctor-1.svg"
+                    alt="Health Journey Visualization"
+                    width={400}
+                    height={300}
+                    className="hidden rounded-lg shadow-lg lg:block"
+                  />
+                </Card>
+              </motion.div>
+            </div>
 
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.3 }}
-          >
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-xl">doctor Benefits</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid gap-4 md:grid-cols-3">
-                  {doctorBenefits.map((benefit, index) => (
-                    <motion.div
-                      key={index}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.5, delay: 0.1 * index }}
-                      className="flex flex-col items-center rounded-lg bg-secondary p-4 text-center"
-                    >
-                      {benefit.icon}
-                      <h3 className="mt-2 font-semibold">{benefit.title}</h3>
-                      <p className="text-sm text-muted-foreground">
-                        {benefit.description}
-                      </p>
-                    </motion.div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          <div className="grid gap-6 md:grid-cols-2">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.4 }}
+              transition={{ duration: 0.5, delay: 0.3 }}
             >
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-xl">Connected Doctors</CardTitle>
+                  <CardTitle className="text-xl">doctor Benefits</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
-                    {connectedDoctors.map((doctor, index) => (
+                  <div className="grid gap-4 md:grid-cols-3">
+                    {doctorBenefits.map((benefit, index) => (
                       <motion.div
-                        key={doctor.id}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.3, delay: index * 0.1 }}
-                        className="flex items-center space-x-4"
+                        key={index}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.5, delay: 0.1 * index }}
+                        className="flex flex-col items-center rounded-lg bg-secondary p-4 text-center"
                       >
-                        <Avatar>
-                          <AvatarImage src={doctor.image} alt={doctor.name} />
-                          <AvatarFallback>
-                            {doctor.name.charAt(0)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <h4 className="font-semibold">{doctor.name}</h4>
-                          <p className="text-sm text-muted-foreground">
-                            {doctor.specialty}
-                          </p>
-                        </div>
+                        {benefit.icon}
+                        <h3 className="mt-2 font-semibold">{benefit.title}</h3>
+                        <p className="text-sm text-muted-foreground">
+                          {benefit.description}
+                        </p>
                       </motion.div>
                     ))}
                   </div>
@@ -444,159 +395,185 @@ export default function DoctorProfile() {
               </Card>
             </motion.div>
 
+            <div className="grid gap-6 md:grid-cols-2">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.4 }}
+              >
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-xl">Blockchain Information</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <InfoItem
+                      icon={
+                        <Shield className="text-blue-500 dark:text-blue-400" />
+                      }
+                      label="Block ID"
+                      value={doctorData?.blockId}
+                    />
+                    <div className="mt-4 text-sm text-muted-foreground">
+                      Wallet connected and verified on blockchain
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.5 }}
+              >
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-xl">Account Balance</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="flex items-center text-3xl font-bold">
+                          <code className="mr-2 mt-2 text-sm text-secondary-foreground">
+                            HTK
+                          </code>
+                          {balance.toFixed(2)}
+                        </div>
+                        <span className="flex items-center text-sm text-primary/70">
+                          Health Tokens Balance
+                        </span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Input
+                          type="number"
+                          placeholder="ETH Amount"
+                          value={topUpAmount}
+                          onChange={(e) => setTopUpAmount(e.target.value)}
+                          className="w-28"
+                          disabled={isLoading}
+                        />
+                        <Button
+                          onClick={handleTopUp}
+                          disabled={isLoading}
+                          className="bg-green-500 text-white hover:bg-green-600 disabled:opacity-50"
+                        >
+                          {isLoading ? (
+                            <>
+                              <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                              Buying...
+                            </>
+                          ) : (
+                            <>
+                              <Plus className="mr-2 size-4" /> Buy HTK
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      Rate: 1 ETH = 100 HTK tokens
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            </div>
+
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.5 }}
+              transition={{ duration: 0.5, delay: 0.6 }}
             >
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-xl">Account Balance</CardTitle>
+                  <CardTitle className="text-xl">Medical Records</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="flex items-center text-3xl font-bold">
-                        <code className="mr-2 mt-2 text-sm text-secondary-foreground">
-                          HTK
-                        </code>
-                        {balance.toFixed(2)}
+                  <Tabs defaultValue="appointments" className="w-full">
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="appointments">Appointments</TabsTrigger>
+                      <TabsTrigger value="prescriptions">
+                        Prescriptions
+                      </TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="appointments">
+                      <div className="space-y-4">
+                        {appointments.map((appointment, index) => (
+                          <motion.div
+                            key={appointment.id}
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ duration: 0.3, delay: index * 0.1 }}
+                            className="flex items-center justify-between py-2"
+                          >
+                            <div className="flex items-center space-x-2">
+                              <Clock className="text-blue-500 dark:text-blue-400" />
+                              <span>
+                                {appointment.startTime.toLocaleString()}
+                              </span>
+                            </div>
+                            <Badge
+                              variant={
+                                appointment.status === "CONFIRMED"
+                                  ? "secondary"
+                                  : "destructive"
+                              }
+                            >
+                              {appointment.status}
+                            </Badge>
+                          </motion.div>
+                        ))}
+                        <motion.div
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                        >
+                          <Button className="mt-4 w-full bg-green-500 text-white hover:bg-green-600">
+                            Schedule New Appointment
+                          </Button>
+                        </motion.div>
                       </div>
-                      <span className="flex items-center text-sm text-primary/70">
-                        Health Tokens Balance
-                      </span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Input
-                        type="number"
-                        placeholder="ETH Amount"
-                        value={topUpAmount}
-                        onChange={(e) => setTopUpAmount(e.target.value)}
-                        className="w-28"
-                        disabled={isLoading}
-                      />
-                      <Button
-                        onClick={handleTopUp}
-                        disabled={isLoading}
-                        className="bg-green-500 text-white hover:bg-green-600 disabled:opacity-50"
-                      >
-                        {isLoading ? (
-                          <>
-                            <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                            Buying...
-                          </>
-                        ) : (
-                          <>
-                            <Plus className="mr-2 size-4" /> Buy HTK
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="mt-2 text-xs text-muted-foreground">
-                    Rate: 1 ETH = 100 HTK tokens
-                  </div>
+                    </TabsContent>
+                    <TabsContent value="prescriptions">
+                      <div className="space-y-4">
+                        {prescriptions.map((prescription, index) => (
+                          <motion.div
+                            key={prescription.id}
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ duration: 0.3, delay: index * 0.1 }}
+                            className="flex items-center justify-between py-2"
+                          >
+                            <div className="flex items-center space-x-2">
+                              <FileText className="text-pink-500 dark:text-pink-400" />
+                              <span>
+                                Issued:{" "}
+                                {prescription.issueDate.toLocaleDateString()}
+                              </span>
+                            </div>
+                            <span>
+                              Valid till:{" "}
+                              {prescription.validTill.toLocaleDateString()}
+                            </span>
+                          </motion.div>
+                        ))}
+                        <motion.div
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                        >
+                          <Button
+                            variant="outline"
+                            className="mt-4 w-full border-purple-500 text-purple-500 hover:bg-purple-100 dark:hover:bg-purple-900"
+                          >
+                            View All Prescriptions
+                          </Button>
+                        </motion.div>
+                      </div>
+                    </TabsContent>
+                  </Tabs>
                 </CardContent>
               </Card>
             </motion.div>
           </div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.6 }}
-          >
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-xl">Medical Records</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Tabs defaultValue="appointments" className="w-full">
-                  <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="appointments">Appointments</TabsTrigger>
-                    <TabsTrigger value="prescriptions">
-                      Prescriptions
-                    </TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="appointments">
-                    <div className="space-y-4">
-                      {appointments.map((appointment, index) => (
-                        <motion.div
-                          key={appointment.id}
-                          initial={{ opacity: 0, x: -20 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ duration: 0.3, delay: index * 0.1 }}
-                          className="flex items-center justify-between py-2"
-                        >
-                          <div className="flex items-center space-x-2">
-                            <Clock className="text-blue-500 dark:text-blue-400" />
-                            <span>
-                              {appointment.startTime.toLocaleString()}
-                            </span>
-                          </div>
-                          <Badge
-                            variant={
-                              appointment.status === "CONFIRMED"
-                                ? "secondary"
-                                : "destructive"
-                            }
-                          >
-                            {appointment.status}
-                          </Badge>
-                        </motion.div>
-                      ))}
-                      <motion.div
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                      >
-                        <Button className="mt-4 w-full bg-green-500 text-white hover:bg-green-600">
-                          Schedule New Appointment
-                        </Button>
-                      </motion.div>
-                    </div>
-                  </TabsContent>
-                  <TabsContent value="prescriptions">
-                    <div className="space-y-4">
-                      {prescriptions.map((prescription, index) => (
-                        <motion.div
-                          key={prescription.id}
-                          initial={{ opacity: 0, x: -20 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ duration: 0.3, delay: index * 0.1 }}
-                          className="flex items-center justify-between py-2"
-                        >
-                          <div className="flex items-center space-x-2">
-                            <FileText className="text-pink-500 dark:text-pink-400" />
-                            <span>
-                              Issued:{" "}
-                              {prescription.issueDate.toLocaleDateString()}
-                            </span>
-                          </div>
-                          <span>
-                            Valid till:{" "}
-                            {prescription.validTill.toLocaleDateString()}
-                          </span>
-                        </motion.div>
-                      ))}
-                      <motion.div
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                      >
-                        <Button
-                          variant="outline"
-                          className="mt-4 w-full border-purple-500 text-purple-500 hover:bg-purple-100 dark:hover:bg-purple-900"
-                        >
-                          View All Prescriptions
-                        </Button>
-                      </motion.div>
-                    </div>
-                  </TabsContent>
-                </Tabs>
-              </CardContent>
-            </Card>
-          </motion.div>
         </div>
-      </div>
+      )}
     </DashboardShell>
   )
 }

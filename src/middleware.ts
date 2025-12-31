@@ -21,8 +21,15 @@ export default withAuth(
           if (!regStatus) {
             return NextResponse.redirect(new URL("/verification", req.url));
           }
+          // If registered, redirect based on role
+          if (regStatus === "patient") {
+            return NextResponse.redirect(new URL("/dashboard/patient/profile", req.url));
+          } else if (regStatus === "doctor") {
+            return NextResponse.redirect(new URL("/dashboard/doctor", req.url));
+          }
         }
-        return NextResponse.redirect(new URL("/dashboard", req.url));
+        // Fallback to post-login-redirect if no status determined
+        return NextResponse.redirect(new URL("/post-login-redirect", req.url));
       }
       return null;
     }

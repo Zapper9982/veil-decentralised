@@ -22,7 +22,7 @@ export default async function Component() {
   // If user already has a role set, redirect them to their appropriate dashboard
   if (userWithRole?.role && userWithRole.role !== "unset") {
     if (userWithRole.role === "doctor") {
-      return redirect("/doctor")
+      return redirect("/dashboard/doctor")
     } else if (userWithRole.role === "patient") {
       return redirect("/dashboard/patient/profile")
     }

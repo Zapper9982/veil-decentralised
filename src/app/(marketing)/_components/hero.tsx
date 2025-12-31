@@ -109,7 +109,7 @@ export default function HeroSection() {
             </div>
             <div className="flex flex-col gap-2 min-[400px]:flex-row">
               <Link
-                href={"/dashboard"}
+                href={"/login"}
                 className={cn(
                   buttonVariants({
                     className:

@@ -25,7 +25,7 @@ export default async function PostLoginRedirect() {
     })
 
     if (doctor) {
-        return redirect("/doctor")
+        return redirect("/dashboard/doctor")
     }
 
     // If user is not registered as either, redirect to verification
